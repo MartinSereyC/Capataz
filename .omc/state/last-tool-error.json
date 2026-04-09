@@ -1,0 +1,7 @@
+{
+  "tool_name": "mcp__plugin_oh-my-claudecode_t__state_list_active",
+  "tool_input_preview": "{\"workingDirectory\":\"/Users/martinsc/AAA Proyectos Software/Capatas\"}",
+  "error": "Error listing active modes: workingDirectory '/Users/martinsc/AAA Proyectos Software/Capatas' is outside the trusted worktree root '/Users/martinsc/AAA Proyectos Software/Capatas '.",
+  "timestamp": "2026-04-09T06:29:09.388Z",
+  "retry_count": 1
+}
