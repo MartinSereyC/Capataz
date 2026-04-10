@@ -22,6 +22,7 @@ export default function ResultadoPage() {
     selectedDate,
     setSelectedDate,
     setDates,
+    overlayVisible,
   } = useParcelContext();
 
   const [drawMode, setDrawMode] = useState(false);
@@ -80,13 +81,14 @@ export default function ResultadoPage() {
             parcel={parcel}
             drawMode={drawMode}
             selectedDate={selectedDate}
+            availableDates={dates}
             onManualConfirm={handleManualConfirm}
             onManualCancel={handleManualCancel}
           />
 
-          {/* Image info overlay — top left */}
+          {/* Image info overlay — top left, below Leaflet zoom controls */}
           {parcel && selectedDate && (
-            <div className="absolute top-4 left-4 z-[1000]">
+            <div className="absolute top-20 left-3 z-[1000]">
               <ImageInfo
                 date={selectedDate}
                 cloudCoverage={coverage[selectedDate] ?? 0}
@@ -103,7 +105,7 @@ export default function ResultadoPage() {
 
           {/* Manual draw trigger + Layer selector — top right */}
           {!drawMode && (
-            <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+            <div className="absolute top-14 right-4 z-[1000] flex flex-col gap-2">
               <button
                 type="button"
                 onClick={handleStartDraw}

@@ -22,7 +22,12 @@ interface SatelliteLayerProps {
   date: string | null;
   /** Parcel data — used for geometry bounds */
   parcel: Parcel;
+  /** All available dates — used to prefetch neighbors */
+  availableDates?: string[];
 }
+
+/** How many neighboring dates to prefetch on each side of the selected date */
+const PREFETCH_RADIUS = 2;
 
 /**
  * Converts a GeoJSON bbox [minLng, minLat, maxLng, maxLat]
@@ -36,8 +41,8 @@ function bboxToLeaflet(bbox: [number, number, number, number]): LatLngBoundsExpr
   ];
 }
 
-export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
-  const { selectedLayerType } = useParcelContext();
+export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteLayerProps) {
+  const { selectedLayerType, overlayVisible } = useParcelContext();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +113,58 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
     };
   }, [date, parcel.bbox, parcel.polygon, selectedLayerType]);
 
+  // Prefetch neighboring dates in the background so slider steps feel instant.
+  // Runs after the current image request, does not update UI state on success.
+  useEffect(() => {
+    if (!date || isMockMode() || availableDates.length === 0) return;
+    const idx = availableDates.indexOf(date);
+    if (idx < 0) return;
+
+    const start = Math.max(0, idx - PREFETCH_RADIUS);
+    const end = Math.min(availableDates.length - 1, idx + PREFETCH_RADIUS);
+    const cacheRef = cache.current;
+    const urlsRef = objectUrls.current;
+    const controllers: AbortController[] = [];
+
+    for (let i = start; i <= end; i++) {
+      const d = availableDates[i];
+      if (d === date) continue;
+      const key = `${d}:${selectedLayerType}`;
+      if (cacheRef.has(key)) continue;
+
+      const controller = new AbortController();
+      controllers.push(controller);
+
+      fetch("/api/satellite-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bbox: parcel.bbox,
+          polygon: parcel.polygon,
+          date: d,
+          layerType: selectedLayerType,
+        }),
+        signal: controller.signal,
+      })
+        .then((res) => (res.ok ? res.blob() : null))
+        .then((blob) => {
+          if (!blob) return;
+          // Re-check cache — current-date fetch may have populated it first.
+          if (cacheRef.has(key)) return;
+          const url = URL.createObjectURL(blob);
+          urlsRef.push(url);
+          cacheRef.set(key, url);
+        })
+        .catch(() => {
+          // Aborted or network error — silently ignore for prefetch.
+        });
+    }
+
+    return () => {
+      controllers.forEach((c) => c.abort());
+    };
+  }, [date, availableDates, parcel.bbox, parcel.polygon, selectedLayerType]);
+
   // Clean up object URLs on unmount
   useEffect(() => {
     const urls = objectUrls.current;
@@ -116,8 +173,8 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
     };
   }, []);
 
-  // No date selected — render nothing
-  if (!date) return null;
+  // No date selected or overlay hidden — render nothing
+  if (!date || !overlayVisible) return null;
 
   if (isMockMode()) {
     const bounds = bboxToLeaflet(parcel.bbox);

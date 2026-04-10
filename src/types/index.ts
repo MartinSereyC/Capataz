@@ -105,6 +105,7 @@ export interface AppState {
   selectedDate: string | null;
   selectedLayerType: SatelliteLayerType;
   sentinelToken: string | null;
+  overlayVisible: boolean;
 }
 
 /** Geocoding result from Nominatim or similar service */

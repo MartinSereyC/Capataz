@@ -54,7 +54,20 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          <UploadZone onFileSelected={upload} disabled={isUploading} />
+          <div className="space-y-4">
+            <UploadZone onFileSelected={upload} disabled={isUploading} />
+            <div className="flex items-center gap-3 text-xs text-gray-400 max-w-md mx-auto">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span>o</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            <a
+              href="/resultado"
+              className="inline-block px-5 py-2 text-sm font-semibold text-green-700 bg-white border border-green-600 rounded-lg hover:bg-green-50 transition-colors"
+            >
+              {es.extraction.drawManually}
+            </a>
+          </div>
         )}
 
         {/* How it works */}

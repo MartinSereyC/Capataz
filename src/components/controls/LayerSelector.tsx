@@ -6,7 +6,7 @@ import { SATELLITE_LAYERS } from "@/lib/satellite-layers";
 import { es } from "@/lib/i18n/es";
 
 export function LayerSelector() {
-  const { selectedLayerType, setSelectedLayerType } = useParcelContext();
+  const { selectedLayerType, setSelectedLayerType, overlayVisible, setOverlayVisible } = useParcelContext();
   const [open, setOpen] = useState(false);
 
   const activeMeta = SATELLITE_LAYERS.find((l) => l.id === selectedLayerType)!;
@@ -79,6 +79,19 @@ export function LayerSelector() {
           ))}
         </div>
       </div>
+
+      {/* Satellite overlay visibility toggle */}
+      <label className="flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-sm rounded-lg shadow border border-gray-200 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={overlayVisible}
+          onChange={(e) => setOverlayVisible(e.target.checked)}
+          className="accent-green-600 w-3.5 h-3.5"
+        />
+        <span className="text-xs text-gray-700 font-medium select-none">
+          {es.layers.showOverlay}
+        </span>
+      </label>
     </div>
   );
 }

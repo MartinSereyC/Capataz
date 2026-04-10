@@ -60,6 +60,8 @@ export const es = {
     confirmDraw: "Confirmar perímetro",
     cancelDraw: "Cancelar",
     resetDraw: "Reiniciar dibujo",
+    basemapStreet: "Mapa",
+    basemapSatellite: "Satélite",
   },
   slider: {
     title: "Línea de tiempo satelital",
@@ -83,6 +85,7 @@ export const es = {
     title: "Vista del terreno",
     change: "Cambiar vista",
     legend: "Leyenda",
+    showOverlay: "Mostrar imagen satelital",
   },
 } as const;
 

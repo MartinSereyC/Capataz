@@ -63,6 +63,18 @@ export function TimeSlider({ dates, cloudCoverage, selectedDate, onDateChange }:
     [dates, onDateChange],
   );
 
+  const step = useCallback(
+    (delta: number) => {
+      const next = Math.max(0, Math.min(dates.length - 1, sliderIndex + delta));
+      if (next === sliderIndex) return;
+      setSliderIndex(next);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      const date = dates[next];
+      if (date) onDateChange(date);
+    },
+    [dates, sliderIndex, onDateChange],
+  );
+
   // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
@@ -98,17 +110,41 @@ export function TimeSlider({ dates, cloudCoverage, selectedDate, onDateChange }:
         </span>
       </div>
 
-      {/* Range input */}
-      <input
-        type="range"
-        min={0}
-        max={dates.length - 1}
-        step={1}
-        value={sliderIndex}
-        onChange={handleChange}
-        className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-green-600"
-        aria-label={es.slider.title}
-      />
+      {/* Range input with arrow buttons */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => step(-1)}
+          disabled={sliderIndex <= 0}
+          aria-label="Fecha anterior"
+          className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-green-100 text-gray-700 hover:text-green-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={dates.length - 1}
+          step={1}
+          value={sliderIndex}
+          onChange={handleChange}
+          className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-green-600"
+          aria-label={es.slider.title}
+        />
+        <button
+          type="button"
+          onClick={() => step(1)}
+          disabled={sliderIndex >= dates.length - 1}
+          aria-label="Fecha siguiente"
+          className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-green-100 text-gray-700 hover:text-green-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </div>
 
       {/* Date tick marks — show first, middle, last */}
       <div className="flex justify-between text-xs text-gray-400 px-0.5">

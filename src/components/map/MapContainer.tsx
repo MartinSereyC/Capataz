@@ -18,6 +18,7 @@ interface MapContainerProps {
   parcel: Parcel | null;
   drawMode?: boolean;
   selectedDate?: string | null;
+  availableDates?: string[];
   onManualConfirm?: (parcel: Parcel) => void;
   onManualCancel?: () => void;
 }
@@ -30,6 +31,7 @@ export function MapContainer({
   parcel,
   drawMode = false,
   selectedDate,
+  availableDates = [],
   onManualConfirm,
   onManualCancel,
 }: MapContainerProps) {
@@ -39,6 +41,7 @@ export function MapContainer({
         parcel={parcel}
         drawMode={drawMode}
         selectedDate={selectedDate ?? null}
+        availableDates={availableDates}
         onManualConfirm={onManualConfirm ?? (() => {})}
         onManualCancel={onManualCancel ?? (() => {})}
       />
