@@ -79,6 +79,11 @@ export const es = {
     error: "Error al buscar. Intente nuevamente.",
     clear: "Limpiar busqueda",
   },
+  layers: {
+    title: "Vista del terreno",
+    change: "Cambiar vista",
+    legend: "Leyenda",
+  },
 } as const;
 
 export type TranslationKey = typeof es;

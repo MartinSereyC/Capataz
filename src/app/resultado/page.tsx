@@ -8,6 +8,7 @@ import { ParcelInfo } from "@/components/controls/ParcelInfo";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useParcelContext } from "@/context/ParcelContext";
 import { useSatelliteDates } from "@/hooks/useSatelliteDates";
+import { LayerSelector } from "@/components/controls/LayerSelector";
 import { es } from "@/lib/i18n/es";
 import type { Parcel } from "@/types";
 
@@ -100,7 +101,7 @@ export default function ResultadoPage() {
             </div>
           )}
 
-          {/* Manual draw trigger — top right */}
+          {/* Manual draw trigger + Layer selector — top right */}
           {!drawMode && (
             <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
               <button
@@ -115,6 +116,10 @@ export default function ResultadoPage() {
                 <span className="text-xs text-center text-gray-500 bg-white/90 rounded px-2 py-1 shadow">
                   Perímetro dibujado manualmente
                 </span>
+              )}
+
+              {parcel && selectedDate && (
+                <LayerSelector />
               )}
             </div>
           )}

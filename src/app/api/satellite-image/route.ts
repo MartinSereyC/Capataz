@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSentinelToken } from "@/lib/sentinel/auth";
 import { buildProcessApiBody, calculateDimensions } from "@/lib/sentinel/process-layer";
 import { isMockMode } from "@/lib/sentinel/mock";
-import type { BboxGeoJSON, GeoJSONPolygon } from "@/types";
+import type { BboxGeoJSON, GeoJSONPolygon, SatelliteLayerType } from "@/types";
 
 // Minimal 1×1 green PNG (valid PNG binary)
 const MOCK_PNG = Buffer.from(
@@ -39,10 +39,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { bbox, polygon, date } = body as {
+  const { bbox, polygon, date, layerType: rawLayerType } = body as {
     bbox: unknown;
     polygon: unknown;
     date: unknown;
+    layerType?: unknown;
   };
 
   // Validate bbox
@@ -70,6 +71,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const VALID_LAYERS: SatelliteLayerType[] = ["true-color", "ndvi", "ndmi", "ndwi"];
+  const layerType: SatelliteLayerType = (
+    typeof rawLayerType === "string" && VALID_LAYERS.includes(rawLayerType as SatelliteLayerType)
+      ? rawLayerType as SatelliteLayerType
+      : "true-color"
+  );
+
   const validBbox = bbox as BboxGeoJSON;
   const validPolygon = polygon as GeoJSONPolygon;
 
@@ -88,7 +96,7 @@ export async function POST(req: NextRequest) {
   try {
     const { token } = await getSentinelToken();
     const { width, height } = calculateDimensions(validBbox);
-    const requestBody = buildProcessApiBody(validBbox, validPolygon, date, width, height);
+    const requestBody = buildProcessApiBody(validBbox, validPolygon, date, width, height, layerType);
 
     const sentinelRes = await fetch("https://sh.dataspace.copernicus.eu/api/v1/process", {
       method: "POST",

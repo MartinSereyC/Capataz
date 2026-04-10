@@ -1,12 +1,13 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Parcel, ParcelSource, AppState } from "@/types";
+import type { Parcel, ParcelSource, AppState, SatelliteLayerType } from "@/types";
 
 interface ParcelContextValue extends AppState {
   setParcel: (parcel: Parcel, source: ParcelSource) => void;
   setDates: (dates: string[], cloudCoverage: Record<string, number>) => void;
   setSelectedDate: (date: string) => void;
+  setSelectedLayerType: (layerType: SatelliteLayerType) => void;
   setSentinelToken: (token: string) => void;
   reset: () => void;
 }
@@ -17,6 +18,7 @@ const initialState: AppState = {
   availableDates: [],
   cloudCoverage: {},
   selectedDate: null,
+  selectedLayerType: "true-color",
   sentinelToken: null,
 };
 
@@ -45,6 +47,10 @@ export function ParcelProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, selectedDate: date }));
   }, []);
 
+  const setSelectedLayerType = useCallback((layerType: SatelliteLayerType) => {
+    setState((prev) => ({ ...prev, selectedLayerType: layerType }));
+  }, []);
+
   const setSentinelToken = useCallback((token: string) => {
     setState((prev) => ({ ...prev, sentinelToken: token }));
   }, []);
@@ -60,6 +66,7 @@ export function ParcelProvider({ children }: { children: ReactNode }) {
         setParcel,
         setDates,
         setSelectedDate,
+        setSelectedLayerType,
         setSentinelToken,
         reset,
       }}

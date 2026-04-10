@@ -13,6 +13,8 @@ import { useState, useEffect, useRef } from "react";
 import { Rectangle, ImageOverlay } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import { isMockMode } from "@/lib/sentinel/mock";
+import { useParcelContext } from "@/context/ParcelContext";
+import { getLayerMeta } from "@/lib/satellite-layers";
 import type { Parcel } from "@/types";
 
 interface SatelliteLayerProps {
@@ -35,6 +37,7 @@ function bboxToLeaflet(bbox: [number, number, number, number]): LatLngBoundsExpr
 }
 
 export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
+  const { selectedLayerType } = useParcelContext();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +53,7 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
     if (!date || isMockMode()) return;
 
     // Already cached
-    const cached = cache.current.get(date);
+    const cached = cache.current.get(`${date}:${selectedLayerType}`);
     if (cached) {
       setImageUrl(cached);
       return;
@@ -70,6 +73,7 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
             bbox: parcel.bbox,
             polygon: parcel.polygon,
             date,
+            layerType: selectedLayerType,
           }),
         });
 
@@ -82,7 +86,7 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
 
         const url = URL.createObjectURL(blob);
         objectUrls.current.push(url);
-        cache.current.set(date!, url);
+        cache.current.set(`${date}:${selectedLayerType}`, url);
         setImageUrl(url);
       } catch (err) {
         if (!cancelled) {
@@ -102,7 +106,7 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
     return () => {
       cancelled = true;
     };
-  }, [date, parcel.bbox, parcel.polygon]);
+  }, [date, parcel.bbox, parcel.polygon, selectedLayerType]);
 
   // Clean up object URLs on unmount
   useEffect(() => {
@@ -117,12 +121,13 @@ export function SatelliteLayer({ date, parcel }: SatelliteLayerProps) {
 
   if (isMockMode()) {
     const bounds = bboxToLeaflet(parcel.bbox);
+    const meta = getLayerMeta(selectedLayerType);
     return (
       <Rectangle
         bounds={bounds}
         pathOptions={{
-          color: "#22c55e",
-          fillColor: "#22c55e",
+          color: meta.mockColor,
+          fillColor: meta.mockColor,
           fillOpacity: 0.35,
           weight: 1,
           opacity: 0.5,

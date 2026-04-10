@@ -6,7 +6,9 @@
 
 import { SENTINEL_CONFIG } from "@/lib/constants";
 import { isMockMode } from "@/lib/sentinel/mock";
-import type { BboxGeoJSON, GeoJSONPolygon } from "@/types";
+import { getLayerMeta } from "@/lib/satellite-layers";
+import { EVALSCRIPTS } from "@/lib/sentinel/evalscripts";
+import type { BboxGeoJSON, GeoJSONPolygon, SatelliteLayerType } from "@/types";
 
 export interface MockLayerConfig {
   type: "mock";
@@ -25,18 +27,6 @@ export interface LiveLayerConfig {
 }
 
 export type SentinelLayerConfig = MockLayerConfig | LiveLayerConfig;
-
-/** True-color evalscript for Sentinel-2 L2A */
-const TRUE_COLOR_EVALSCRIPT = `//VERSION=3
-function setup() {
-  return {
-    input: [{ bands: ["B04", "B03", "B02"] }],
-    output: { bands: 3 }
-  };
-}
-function evaluatePixel(sample) {
-  return [3.5 * sample.B04, 3.5 * sample.B03, 3.5 * sample.B02];
-}`;
 
 /**
  * Calculates image dimensions from a bbox while keeping the larger dimension
@@ -76,6 +66,7 @@ export function buildProcessApiBody(
   date: string,
   width: number,
   height: number,
+  layerType: SatelliteLayerType = "true-color",
 ): object {
   const [minLng, minLat, maxLng, maxLat] = bbox;
   return {
@@ -103,7 +94,7 @@ export function buildProcessApiBody(
         { identifier: "default", format: { type: "image/png" } },
       ],
     },
-    evalscript: TRUE_COLOR_EVALSCRIPT,
+    evalscript: EVALSCRIPTS[layerType],
   };
 }
 
@@ -118,11 +109,12 @@ export function getSentinelLayerConfig(
   bbox: BboxGeoJSON,
   polygon: GeoJSONPolygon,
   date: string,
+  layerType: SatelliteLayerType = "true-color",
 ): SentinelLayerConfig {
   if (isMockMode()) {
     return {
       type: "mock",
-      color: "#22c55e", // green-500
+      color: getLayerMeta(layerType).mockColor,
       opacity: 0.35,
       bbox,
     };
@@ -132,7 +124,7 @@ export function getSentinelLayerConfig(
     type: "live",
     processApiUrl: SENTINEL_CONFIG.processApiUrl,
     collection: SENTINEL_CONFIG.collection,
-    evalscript: TRUE_COLOR_EVALSCRIPT,
+    evalscript: EVALSCRIPTS[layerType],
     polygon,
     date,
   };

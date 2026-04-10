@@ -93,6 +93,9 @@ export type ParseDeedResponse = ParseDeedSuccess | ParseDeedError;
 /** Parcel source: auto-extracted or manually drawn */
 export type ParcelSource = "auto" | "manual";
 
+/** Available satellite analysis layer types */
+export type SatelliteLayerType = "true-color" | "ndvi" | "ndmi" | "ndwi";
+
 /** Shared app state */
 export interface AppState {
   parcel: Parcel | null;
@@ -100,6 +103,7 @@ export interface AppState {
   availableDates: string[];
   cloudCoverage: Record<string, number>;
   selectedDate: string | null;
+  selectedLayerType: SatelliteLayerType;
   sentinelToken: string | null;
 }
 
