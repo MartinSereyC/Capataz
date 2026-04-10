@@ -9,8 +9,8 @@
  * Must be rendered inside a react-leaflet <MapContainer>.
  */
 
-import { useState, useEffect, useRef } from "react";
-import { Rectangle, ImageOverlay } from "react-leaflet";
+import { useState, useEffect, useRef, useId } from "react";
+import { Rectangle, ImageOverlay, SVGOverlay } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import { isMockMode } from "@/lib/sentinel/mock";
 import { useParcelContext } from "@/context/ParcelContext";
@@ -43,6 +43,7 @@ function bboxToLeaflet(bbox: [number, number, number, number]): LatLngBoundsExpr
 
 export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteLayerProps) {
   const { selectedLayerType, overlayVisible, setSatelliteImageUrl } = useParcelContext();
+  const clipId = useId().replace(/:/g, "");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,13 +220,40 @@ export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteL
           Cargando imagen satelital...
         </div>
       )}
-      {imageUrl && !error && (
-        <ImageOverlay
-          url={imageUrl}
-          bounds={bounds}
-          opacity={1}
-        />
-      )}
+      {imageUrl && !error && (() => {
+        const [minLng, minLat, maxLng, maxLat] = parcel.bbox;
+        const w = maxLng - minLng;
+        const h = maxLat - minLat;
+        const points = parcel.polygon.coordinates[0]
+          .map(([lng, lat]) => {
+            const x = ((lng - minLng) / w) * 1000;
+            const y = ((maxLat - lat) / h) * 1000;
+            return `${x},${y}`;
+          })
+          .join(" ");
+        const cid = `parcel-clip-${clipId}`;
+        return (
+          <SVGOverlay
+            bounds={bounds}
+            attributes={{ viewBox: "0 0 1000 1000", preserveAspectRatio: "none" }}
+          >
+            <defs>
+              <clipPath id={cid}>
+                <polygon points={points} />
+              </clipPath>
+            </defs>
+            <image
+              href={imageUrl}
+              x="0"
+              y="0"
+              width="1000"
+              height="1000"
+              preserveAspectRatio="none"
+              clipPath={`url(#${cid})`}
+            />
+          </SVGOverlay>
+        );
+      })()}
     </>
   );
 }

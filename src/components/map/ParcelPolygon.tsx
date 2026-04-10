@@ -41,8 +41,7 @@ export function ParcelPolygon({ polygon, bbox }: ParcelPolygonProps) {
       pathOptions={{
         color: "#16a34a",       // darker green border
         weight: 2,
-        fillColor: "#22c55e",   // green fill
-        fillOpacity: 0.25,
+        fill: false,            // outline only, no translucent fill
       }}
     />
   );
