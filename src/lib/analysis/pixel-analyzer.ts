@@ -1,6 +1,9 @@
 /**
  * Client-side pixel analysis using canvas + nearest-centroid classification.
- * Analyzes the satellite image PNG already loaded as a blob object URL.
+ *
+ * Centroids are the EXACT RGB triplets produced by the flat-color evalscripts
+ * in src/lib/sentinel/evalscripts.ts, so classification is essentially exact
+ * (nearest-centroid collapses to equality except for PNG compression noise).
  */
 
 import type { SatelliteLayerType, FieldAnalysis, FieldCategory } from "@/types";
@@ -16,24 +19,29 @@ interface Centroid {
   b: number;
 }
 
+// Exactly matches evalscripts.ts NDVI flat colors (0-1 floats × 255).
 const NDVI_CENTROIDS: Centroid[] = [
-  { id: "stressed", label: "Estresada", color: "#CC0000", r: 204, g: 0, b: 0 },
-  { id: "moderate", label: "Moderada", color: "#CCCC00", r: 204, g: 204, b: 0 },
-  { id: "healthy", label: "Sana", color: "#669900", r: 102, g: 153, b: 0 },
-  { id: "very_healthy", label: "Muy sana", color: "#003300", r: 0, g: 51, b: 0 },
+  { id: "critical", label: "Crítico", color: "#CC1A1A", r: 204, g: 26, b: 26 },
+  { id: "stressed", label: "Estresado", color: "#E68C1A", r: 230, g: 140, b: 26 },
+  { id: "moderate", label: "Moderado", color: "#F2D926", r: 242, g: 217, b: 38 },
+  { id: "healthy", label: "Sano", color: "#4DB326", r: 77, g: 179, b: 38 },
+  { id: "very_healthy", label: "Muy sano", color: "#0D660D", r: 13, g: 102, b: 13 },
 ];
 
 const NDMI_CENTROIDS: Centroid[] = [
-  { id: "dry", label: "Seco", color: "#994C00", r: 153, g: 76, b: 0 },
-  { id: "adequate", label: "Adecuada", color: "#CCB200", r: 204, g: 178, b: 0 },
+  { id: "very_dry", label: "Muy seco", color: "#A6400D", r: 166, g: 64, b: 13 },
+  { id: "dry", label: "Seco", color: "#E69926", r: 230, g: 153, b: 38 },
+  { id: "adequate", label: "Adecuado", color: "#F2E64D", r: 242, g: 230, b: 77 },
   { id: "humid", label: "Húmedo", color: "#338CCC", r: 51, g: 140, b: 204 },
-  { id: "saturated", label: "Saturado", color: "#0000FF", r: 0, g: 0, b: 255 },
+  { id: "saturated", label: "Saturado", color: "#1A2699", r: 26, g: 38, b: 153 },
 ];
 
 const NDWI_CENTROIDS: Centroid[] = [
-  { id: "dry_land", label: "Tierra seca", color: "#FFFFFF", r: 255, g: 255, b: 255 },
-  { id: "humid", label: "Humedad", color: "#CCE5FF", r: 204, g: 229, b: 255 },
-  { id: "water", label: "Agua", color: "#0033FF", r: 0, g: 51, b: 255 },
+  { id: "dry_land", label: "Tierra seca", color: "#D9CCB3", r: 217, g: 204, b: 179 },
+  { id: "moist_soil", label: "Suelo húmedo", color: "#B3CC99", r: 179, g: 204, b: 153 },
+  { id: "low_water", label: "Agua baja", color: "#80BFE6", r: 128, g: 191, b: 230 },
+  { id: "moderate_water", label: "Agua moderada", color: "#2673CC", r: 38, g: 115, b: 204 },
+  { id: "deep_water", label: "Agua profunda", color: "#0D268C", r: 13, g: 38, b: 140 },
 ];
 
 function getCentroids(layerType: SatelliteLayerType): Centroid[] {
