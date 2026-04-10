@@ -102,3 +102,11 @@ export interface AppState {
   selectedDate: string | null;
   sentinelToken: string | null;
 }
+
+/** Geocoding result from Nominatim or similar service */
+export interface GeocodingResult {
+  displayName: string;
+  lat: number;
+  lng: number;
+  boundingbox: [number, number, number, number]; // [south, north, west, east]
+}

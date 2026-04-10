@@ -73,3 +73,11 @@ export const MAP_DEFAULTS = {
   /** Padding when fitting parcel bounds */
   fitBoundsPadding: [50, 50] as [number, number],
 } as const;
+
+// --- Nominatim Geocoding ---
+export const NOMINATIM_CONFIG = {
+  url: "https://nominatim.openstreetmap.org/search",
+  debounceMs: 1000,
+  minQueryLength: 3,
+  maxResults: 5,
+} as const;

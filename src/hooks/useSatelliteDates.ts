@@ -40,9 +40,11 @@ export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesRe
       return;
     }
 
+    // Search a wider window (2x) to account for Sentinel-2 processing delays,
+    // then trim results to 6 months anchored to the latest available image.
     const today = new Date();
     const fromDate = new Date(today);
-    fromDate.setMonth(fromDate.getMonth() - SENTINEL_CONFIG.defaultMonths);
+    fromDate.setMonth(fromDate.getMonth() - SENTINEL_CONFIG.defaultMonths * 2);
 
     const toStr = today.toISOString().split("T")[0];
     const fromStr = fromDate.toISOString().split("T")[0];
@@ -74,6 +76,21 @@ export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesRe
         }
 
         const data = await res.json() as SatelliteDatesResponse;
+
+        // Trim to 6 months anchored to the latest available image
+        if (data.dates.length > 0) {
+          const latestDate = new Date(data.dates[data.dates.length - 1]);
+          const cutoff = new Date(latestDate);
+          cutoff.setMonth(cutoff.getMonth() - SENTINEL_CONFIG.defaultMonths);
+          const cutoffStr = cutoff.toISOString().split("T")[0];
+
+          data.dates = data.dates.filter((d) => d >= cutoffStr);
+          const dateSet = new Set(data.dates);
+          for (const key of Object.keys(data.cloud_coverage)) {
+            if (!dateSet.has(key)) delete data.cloud_coverage[key];
+          }
+          data.total = data.dates.length;
+        }
 
         if (!cancelled) {
           cache.current.set(cacheKey, data);

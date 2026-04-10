@@ -17,6 +17,7 @@ const LeafletMap = dynamic(() => import("./LeafletMap"), {
 interface MapContainerProps {
   parcel: Parcel | null;
   drawMode?: boolean;
+  selectedDate?: string | null;
   onManualConfirm?: (parcel: Parcel) => void;
   onManualCancel?: () => void;
 }
@@ -28,6 +29,7 @@ interface MapContainerProps {
 export function MapContainer({
   parcel,
   drawMode = false,
+  selectedDate,
   onManualConfirm,
   onManualCancel,
 }: MapContainerProps) {
@@ -36,6 +38,7 @@ export function MapContainer({
       <LeafletMap
         parcel={parcel}
         drawMode={drawMode}
+        selectedDate={selectedDate ?? null}
         onManualConfirm={onManualConfirm ?? (() => {})}
         onManualCancel={onManualCancel ?? (() => {})}
       />

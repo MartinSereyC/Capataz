@@ -32,11 +32,11 @@ export async function getSentinelToken(): Promise<SentinelTokenResponse> {
     return { token: tokenCache.token, expires_in: Math.floor((tokenCache.expiresAt - now) / 1000) };
   }
 
-  const clientId = process.env.SENTINEL_CLIENT_ID;
-  const clientSecret = process.env.SENTINEL_CLIENT_SECRET;
+  const clientId = process.env.SENTINEL_HUB_CLIENT_ID?.trim();
+  const clientSecret = process.env.SENTINEL_HUB_CLIENT_SECRET?.trim();
 
   if (!clientId || !clientSecret) {
-    throw new Error("SENTINEL_CLIENT_ID and SENTINEL_CLIENT_SECRET must be set in environment variables");
+    throw new Error("SENTINEL_HUB_CLIENT_ID and SENTINEL_HUB_CLIENT_SECRET must be set in environment variables");
   }
 
   const body = new URLSearchParams({

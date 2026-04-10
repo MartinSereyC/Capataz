@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useMap, Polygon } from "react-leaflet";
 import L from "leaflet";
 import type { Parcel, GeoJSONPolygon, BboxGeoJSON } from "@/types";
@@ -77,6 +77,7 @@ export function ManualDraw({ onConfirm, onCancel }: ManualDrawProps) {
   const [points, setPoints] = useState<[number, number][]>([]);
   // Leaflet marker layer refs for cleanup
   const [markerLayer] = useState(() => L.layerGroup());
+  const controlRef = useRef<HTMLDivElement>(null);
 
   const canConfirm = points.length >= 3;
 
@@ -88,6 +89,12 @@ export function ManualDraw({ onConfirm, onCancel }: ManualDrawProps) {
       markerLayer.remove();
     };
   }, [map, markerLayer]);
+
+  // Prevent clicks on the control panel from adding map points
+  useEffect(() => {
+    const el = controlRef.current;
+    if (el) L.DomEvent.disableClickPropagation(el);
+  }, []);
 
   // Map click handler — adds a point and a small circle marker
   const handleMapClick = useCallback(
@@ -155,6 +162,7 @@ export function ManualDraw({ onConfirm, onCancel }: ManualDrawProps) {
 
       {/* Drawing control panel — overlaid on the map */}
       <div
+        ref={controlRef}
         className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-3 pointer-events-none"
         style={{ pointerEvents: "none" }}
       >

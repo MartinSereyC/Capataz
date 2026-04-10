@@ -43,6 +43,16 @@ export const es = {
     outsideChile:
       "Las coordenadas no corresponden a una ubicación en Chile. Verifique el documento e intente nuevamente.",
     drawManually: "Dibujar manualmente",
+    parcelInfo: "Información del terreno",
+    area: "Superficie",
+    hectares: "hectáreas",
+    format: "Formato detectado",
+    vertices: "Vértices",
+  },
+  satellite: {
+    loading: "Cargando imagen satelital...",
+    error: "No se pudo cargar la imagen para esta fecha.",
+    noData: "Sin datos satelitales para esta fecha.",
   },
   map: {
     drawInstructions:
@@ -61,6 +71,13 @@ export const es = {
     generic: "Ocurrió un error inesperado. Intente nuevamente.",
     networkError: "Error de conexión. Verifique su internet e intente nuevamente.",
     serverError: "Error del servidor. Intente nuevamente en unos minutos.",
+  },
+  search: {
+    placeholder: "Buscar lugar, direccion o comuna...",
+    noResults: "No se encontraron resultados",
+    loading: "Buscando...",
+    error: "Error al buscar. Intente nuevamente.",
+    clear: "Limpiar busqueda",
   },
 } as const;
 

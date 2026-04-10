@@ -4,11 +4,14 @@ import { MapContainer as LeafletMapContainer, TileLayer } from "react-leaflet";
 import type { Parcel } from "@/types";
 import { MAP_DEFAULTS } from "@/lib/constants";
 import { ParcelPolygon } from "./ParcelPolygon";
+import { SatelliteLayer } from "./SatelliteLayer";
 import { ManualDraw } from "./ManualDraw";
+import { LocationSearch } from "./LocationSearch";
 
 interface LeafletMapProps {
   parcel: Parcel | null;
   drawMode: boolean;
+  selectedDate: string | null;
   onManualConfirm: (parcel: Parcel) => void;
   onManualCancel: () => void;
 }
@@ -19,6 +22,7 @@ interface LeafletMapProps {
 export default function LeafletMap({
   parcel,
   drawMode,
+  selectedDate,
   onManualConfirm,
   onManualCancel,
 }: LeafletMapProps) {
@@ -37,7 +41,10 @@ export default function LeafletMap({
       />
 
       {parcel && !drawMode && (
-        <ParcelPolygon polygon={parcel.polygon} bbox={parcel.bbox} />
+        <>
+          <SatelliteLayer date={selectedDate} parcel={parcel} />
+          <ParcelPolygon polygon={parcel.polygon} bbox={parcel.bbox} />
+        </>
       )}
 
       {drawMode && (
@@ -46,6 +53,8 @@ export default function LeafletMap({
           onCancel={onManualCancel}
         />
       )}
+
+      {!drawMode && <LocationSearch />}
     </LeafletMapContainer>
   );
 }
