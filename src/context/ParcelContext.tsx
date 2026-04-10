@@ -10,6 +10,7 @@ interface ParcelContextValue extends AppState {
   setSelectedLayerType: (layerType: SatelliteLayerType) => void;
   setSentinelToken: (token: string) => void;
   setOverlayVisible: (visible: boolean) => void;
+  setSatelliteImageUrl: (url: string | null) => void;
   reset: () => void;
 }
 
@@ -22,6 +23,7 @@ const initialState: AppState = {
   selectedLayerType: "true-color",
   sentinelToken: null,
   overlayVisible: true,
+  satelliteImageUrl: null,
 };
 
 const ParcelContext = createContext<ParcelContextValue | null>(null);
@@ -61,6 +63,10 @@ export function ParcelProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, overlayVisible: visible }));
   }, []);
 
+  const setSatelliteImageUrl = useCallback((url: string | null) => {
+    setState((prev) => ({ ...prev, satelliteImageUrl: url }));
+  }, []);
+
   const reset = useCallback(() => {
     setState(initialState);
   }, []);
@@ -75,6 +81,7 @@ export function ParcelProvider({ children }: { children: ReactNode }) {
         setSelectedLayerType,
         setSentinelToken,
         setOverlayVisible,
+        setSatelliteImageUrl,
         reset,
       }}
     >

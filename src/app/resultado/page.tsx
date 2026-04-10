@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useParcelContext } from "@/context/ParcelContext";
 import { useSatelliteDates } from "@/hooks/useSatelliteDates";
 import { LayerSelector } from "@/components/controls/LayerSelector";
+import { FieldHealthDashboard } from "@/components/controls/FieldHealthDashboard";
 import { es } from "@/lib/i18n/es";
 import type { Parcel } from "@/types";
 
@@ -93,6 +94,13 @@ export default function ResultadoPage() {
                 date={selectedDate}
                 cloudCoverage={coverage[selectedDate] ?? 0}
               />
+            </div>
+          )}
+
+          {/* Field health dashboard — left side below image info */}
+          {parcel && selectedDate && (
+            <div className="absolute top-44 left-3 z-[1000]">
+              <FieldHealthDashboard />
             </div>
           )}
 

@@ -96,6 +96,26 @@ export type ParcelSource = "auto" | "manual";
 /** Available satellite analysis layer types */
 export type SatelliteLayerType = "true-color" | "ndvi" | "ndmi" | "ndwi";
 
+/** One category bucket from pixel analysis */
+export interface FieldCategory {
+  id: string;
+  label: string;
+  color: string;
+  percentage: number;
+  hectares: number;
+  pixelCount: number;
+}
+
+/** Result of a client-side pixel analysis for one image */
+export interface FieldAnalysis {
+  layerType: SatelliteLayerType;
+  score: number;
+  categories: FieldCategory[];
+  recommendations: string[];
+  totalValidPixels: number;
+  analyzedAt: number;
+}
+
 /** Shared app state */
 export interface AppState {
   parcel: Parcel | null;
@@ -106,6 +126,7 @@ export interface AppState {
   selectedLayerType: SatelliteLayerType;
   sentinelToken: string | null;
   overlayVisible: boolean;
+  satelliteImageUrl: string | null;
 }
 
 /** Geocoding result from Nominatim or similar service */

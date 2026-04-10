@@ -42,7 +42,7 @@ function bboxToLeaflet(bbox: [number, number, number, number]): LatLngBoundsExpr
 }
 
 export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteLayerProps) {
-  const { selectedLayerType, overlayVisible } = useParcelContext();
+  const { selectedLayerType, overlayVisible, setSatelliteImageUrl } = useParcelContext();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +93,7 @@ export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteL
         objectUrls.current.push(url);
         cache.current.set(`${date}:${selectedLayerType}`, url);
         setImageUrl(url);
+        setSatelliteImageUrl(url);
       } catch (err) {
         if (!cancelled) {
           const msg = err instanceof Error ? err.message : "Unknown error";
@@ -170,8 +171,9 @@ export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteL
     const urls = objectUrls.current;
     return () => {
       urls.forEach((url) => URL.revokeObjectURL(url));
+      setSatelliteImageUrl(null);
     };
-  }, []);
+  }, [setSatelliteImageUrl]);
 
   // No date selected or overlay hidden — render nothing
   if (!date || !overlayVisible) return null;

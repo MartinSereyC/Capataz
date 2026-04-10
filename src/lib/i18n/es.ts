@@ -87,6 +87,17 @@ export const es = {
     legend: "Leyenda",
     showOverlay: "Mostrar imagen satelital",
   },
+  analysis: {
+    title: "Análisis del campo",
+    score: "Puntaje",
+    distribution: "Distribución",
+    recommendations: "Recomendaciones",
+    hectares: "ha",
+    selectAnalysisLayer: "Selecciona una capa de análisis (NDVI, NDMI o NDWI) para ver estadísticas del campo.",
+    loading: "Analizando imagen...",
+    error: "No se pudo analizar la imagen.",
+    noData: "Sin datos para analizar.",
+  },
 } as const;
 
 export type TranslationKey = typeof es;
