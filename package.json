@@ -8,17 +8,25 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "tsx src/lib/db/migrate.ts",
+    "db:reset": "docker compose down -v && docker compose up -d db && sleep 3 && npm run db:migrate",
+    "job:daily": "tsx scripts/run-daily-job.ts",
+    "admin:magic": "tsx scripts/admin-magic-link.ts"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.19.2",
     "leaflet": "^1.9.4",
     "next": "16.2.3",
+    "node-cron": "^3.0.3",
     "pdf-parse": "^2.4.5",
+    "postgres": "^3.4.5",
     "proj4": "^2.20.8",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-leaflet": "^5.0.0"
+    "react-leaflet": "^5.0.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -26,14 +34,17 @@
     "@testing-library/react": "^16.3.2",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
+    "@types/node-cron": "^3.0.11",
     "@types/proj4": "^2.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "fake-indexeddb": "^6.0.0",
     "jsdom": "^29.0.2",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5",
     "vitest": "^4.1.3"
   }

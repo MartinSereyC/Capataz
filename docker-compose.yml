@@ -1,0 +1,42 @@
+name: capataz
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    container_name: capataz-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: capataz
+      POSTGRES_PASSWORD: capataz
+      POSTGRES_DB: capataz
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - capataz-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capataz -d capataz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capataz-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: postgres://capataz:capataz@db:5432/capataz
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  capataz-db-data:
+    name: capataz-db-data

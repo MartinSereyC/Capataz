@@ -55,6 +55,17 @@ export function BasemapToggle({ basemap, onChange }: BasemapToggleProps) {
       >
         {es.map.basemapSatellite}
       </button>
+      <button
+        type="button"
+        onClick={() => onChange("hybrid")}
+        className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+          basemap === "hybrid"
+            ? "bg-white text-gray-900"
+            : "bg-gray-700/80 text-white/80 hover:bg-gray-600/80"
+        }`}
+      >
+        {es.map.basemapHybrid}
+      </button>
     </div>
   );
 }

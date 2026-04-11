@@ -62,6 +62,7 @@ export const es = {
     resetDraw: "Reiniciar dibujo",
     basemapStreet: "Mapa",
     basemapSatellite: "Satélite",
+    basemapHybrid: "Híbrido",
   },
   slider: {
     title: "Línea de tiempo satelital",

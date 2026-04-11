@@ -1,0 +1,24 @@
+{
+  "name": "Capataz",
+  "short_name": "Capataz",
+  "description": "Asistente de timing de riego",
+  "lang": "es-CL",
+  "start_url": "/hoy",
+  "display": "standalone",
+  "theme_color": "#0f766e",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+FROM postgis/postgis:16-3.4-alpine
+
+COPY <<'EOF' /docker-entrypoint-initdb.d/00-extensions.sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+EOF
