@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db/client";
+import { ejecutarJobDiario } from "@/lib/cron/daily-job";
 import type {
   RecomendacionDiariaRow,
   Semaforo,
@@ -57,6 +58,41 @@ export async function listarRecomendacionesDelDia(
   `;
 
   return rows;
+}
+
+/**
+ * Garantiza que el usuario tenga recomendaciones para hoy.
+ * Si a algún predio del usuario le faltan filas para la fecha de hoy (Santiago),
+ * corre el motor on-demand solo para esos predios. Los predios que ya tienen
+ * recomendaciones se omiten. Upsert en DB hace la llamada idempotente.
+ * Silencia errores: la página mostrará el fallback si todo falla.
+ */
+export async function asegurarRecomendacionesDelDia(
+  usuarioId: string
+): Promise<void> {
+  const fechaSantiago = fechaHoySantiago();
+
+  const rows = await sql<Array<{ predio_id: string }>>`
+    SELECT DISTINCT p.id AS predio_id
+    FROM predios p
+    JOIN zonas z ON z.predio_id = p.id
+    WHERE p.usuario_id = ${usuarioId}
+      AND NOT EXISTS (
+        SELECT 1 FROM recomendaciones_diarias r
+        WHERE r.zona_id = z.id AND r.fecha = ${fechaSantiago}::date
+      )
+  `;
+
+  if (rows.length === 0) return;
+
+  const predioIds = rows.map((r) => r.predio_id);
+  const fecha = new Date(`${fechaSantiago}T12:00:00Z`);
+
+  try {
+    await ejecutarJobDiario({ predioIds, fecha });
+  } catch {
+    // noop — la página renderiza el fallback.
+  }
 }
 
 export async function obtenerRecomendacion(

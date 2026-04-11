@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { obtenerSesionActual } from "@/lib/auth/server-helpers";
 import {
+  asegurarRecomendacionesDelDia,
   listarRecomendacionesDelDia,
   type RecomendacionConZona,
 } from "@/lib/recomendaciones/repo";
@@ -57,6 +58,7 @@ export default async function HoyPage() {
   }
 
   const ahora = new Date();
+  await asegurarRecomendacionesDelDia(sesion.usuarioId);
   const recomendaciones = await listarRecomendacionesDelDia(sesion.usuarioId);
   const porPredio = agruparPorPredio(recomendaciones);
 
@@ -81,7 +83,7 @@ export default async function HoyPage() {
       {recomendaciones.length === 0 ? (
         <div className="rounded-xl bg-white border border-gray-200 p-6 text-center">
           <p className="text-gray-600 text-sm">
-            Aún no hay recomendaciones para hoy. El reporte se genera a las 5:30 AM.
+            No pudimos preparar las recomendaciones en este momento. Intenta de nuevo en unos segundos.
           </p>
         </div>
       ) : (
