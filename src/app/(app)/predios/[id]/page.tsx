@@ -129,7 +129,7 @@ export default function PredioDetallePage({
   if (!predio) return null;
 
   return (
-    <div className="w-full px-4 py-6 space-y-4">
+    <div className="h-screen w-full px-4 py-4 flex flex-col gap-3 overflow-hidden">
       <div className="flex items-center gap-3">
         <Link href="/predios" className="text-sm text-blue-600 underline">
           Mis Predios
@@ -147,8 +147,8 @@ export default function PredioDetallePage({
           {error}
         </div>
       )}
-      <div className="flex flex-col lg:flex-row gap-4 lg:h-[calc(100vh-200px)]">
-        <aside className="lg:w-80 lg:flex-shrink-0 lg:overflow-y-auto space-y-4 lg:pr-2">
+      <div className="flex flex-row gap-4 flex-1 min-h-0">
+        <aside className="w-1/4 flex-shrink-0 overflow-y-auto space-y-4 pr-2">
           <Link
             href="/hoy"
             className="block text-center bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded"
@@ -181,7 +181,7 @@ export default function PredioDetallePage({
           </section>
         </aside>
         {predio.geometria && (
-          <section className="flex-1 h-[400px] lg:h-auto rounded overflow-hidden border border-gray-200">
+          <section className="flex-1 h-full rounded overflow-hidden border border-gray-200">
             <PredioMap
               modo="view"
               geometriaInicial={predio.geometria}
