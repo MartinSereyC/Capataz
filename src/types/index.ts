@@ -19,7 +19,7 @@ export type CoordinateFormat = "UTM_18S" | "UTM_19S" | "LATLONG_DECIMAL" | "LATL
 /** GeoJSON Polygon geometry */
 export interface GeoJSONPolygon {
   type: "Polygon";
-  coordinates: number[][][];
+  coordinates: [number, number][][];
 }
 
 /** Extracted parcel data from a land deed */
