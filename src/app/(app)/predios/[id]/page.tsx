@@ -130,13 +130,13 @@ export default function PredioDetallePage({
 
   return (
     <div className="h-screen w-full px-4 py-4 flex flex-col gap-3 overflow-hidden">
-      <div className="flex items-center gap-3">
-        <Link href="/predios" className="text-sm text-blue-600 underline">
+      <nav className="flex items-center gap-1.5 text-sm">
+        <Link href="/predios" className="text-gray-400 hover:text-foreground transition-colors">
           Mis Predios
         </Link>
-        <span className="text-gray-400">/</span>
-        <h1 className="text-xl font-bold">{predio.nombre}</h1>
-      </div>
+        <span className="text-gray-600">/</span>
+        <h1 className="text-sm font-semibold text-foreground">{predio.nombre}</h1>
+      </nav>
       {(predio.region || predio.comuna) && (
         <p className="text-sm text-gray-500">
           {[predio.region, predio.comuna].filter(Boolean).join(", ")}

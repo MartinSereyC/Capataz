@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { CATALOGO_FENOLOGIA } from '../../src/lib/fenologia/catalogo';
 import type { Cultivo } from '../../src/lib/fenologia/types';
 
-const CULTIVOS: Cultivo[] = ['palto_hass', 'citricos', 'ciruela_dagen'];
+const CULTIVOS: Cultivo[] = [
+  'palto_hass', 'citricos', 'ciruela_dagen', 'manzano', 'almendro',
+  'arandano', 'cerezo', 'duraznero', 'kiwi', 'nogales', 'olivo',
+  'uva_mesa', 'uva_vinifera',
+];
 
 describe('CATALOGO_FENOLOGIA', () => {
-  it('tiene exactamente 36 entradas', () => {
-    expect(CATALOGO_FENOLOGIA).toHaveLength(36);
+  it('tiene exactamente 156 entradas (13 cultivos × 12 meses)', () => {
+    expect(CATALOGO_FENOLOGIA).toHaveLength(156);
   });
 
   it('cubre todas las combinaciones cultivo × mes (1-12)', () => {

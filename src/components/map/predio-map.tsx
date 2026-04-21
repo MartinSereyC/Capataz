@@ -80,6 +80,8 @@ function GeomanController({
 
   useEffect(() => {
     if (!map) return;
+    // React Strict Mode double-invokes effects; panes may be gone after cleanup
+    if (!map.getPane('overlayPane')) return;
 
     const createdLayers: Layer[] = [];
     let cancelled = false;

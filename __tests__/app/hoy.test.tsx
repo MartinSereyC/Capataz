@@ -10,6 +10,7 @@ vi.mock("@/lib/auth/server-helpers", () => ({
 // Mock repo
 vi.mock("@/lib/recomendaciones/repo", () => ({
   listarRecomendacionesDelDia: vi.fn(),
+  asegurarRecomendacionesDelDia: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock next/navigation

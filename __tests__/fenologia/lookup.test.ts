@@ -41,7 +41,7 @@ describe('obtenerFenologia', () => {
   it('lanza error para cultivo no soportado', () => {
     expect(() =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      obtenerFenologia('manzano' as any, 1),
+      obtenerFenologia('tomate' as any, 1),
     ).toThrow('Cultivo no soportado');
   });
 
@@ -52,12 +52,13 @@ describe('obtenerFenologia', () => {
 });
 
 describe('listarCultivosSoportados', () => {
-  it('retorna los 3 cultivos', () => {
+  it('retorna los 13 cultivos', () => {
     const cultivos = listarCultivosSoportados();
-    expect(cultivos).toHaveLength(3);
+    expect(cultivos).toHaveLength(13);
     expect(cultivos).toContain('palto_hass');
     expect(cultivos).toContain('citricos');
     expect(cultivos).toContain('ciruela_dagen');
+    expect(cultivos).toContain('manzano');
   });
 });
 
