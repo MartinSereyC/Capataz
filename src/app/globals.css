@@ -4,25 +4,94 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #15181a;
+
+  --accent: #2d6a3e;
+  --accent-deep: #1f4d2c;
+  --accent-soft: #e7efe4;
+  --accent-line: #b9ccb3;
+
+  --c-bg: #ffffff;
+  --c-bg-muted: #f7f6f3;
+  --c-bg-panel: #fafaf8;
+  --c-line: #e7e5df;
+  --c-line-strong: #cfcdc5;
+  --c-text: #15181a;
+  --c-text-muted: #5c6159;
+  --c-text-faint: #8a8e86;
+
+  --stress-ok: #4a8a52;
+  --stress-mild: #b6c24a;
+  --stress-warn: #e4b53a;
+  --stress-high: #d97a2a;
+  --stress-crit: #c24231;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 16px;
+
+  --shadow-soft: 0 1px 2px rgba(20,25,20,0.04), 0 1px 3px rgba(20,25,20,0.06);
+  --shadow-card: 0 2px 8px rgba(20,25,20,0.06), 0 12px 32px rgba(20,25,20,0.08);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-ibm-plex-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+}
+
+@keyframes capataz-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* Custom range slider for timeline */
+.capataz-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--c-line-strong);
+  outline: none;
+  cursor: pointer;
+}
+
+.capataz-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(20,25,20,0.18);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.capataz-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.capataz-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(20,25,20,0.18);
+  cursor: pointer;
 }
