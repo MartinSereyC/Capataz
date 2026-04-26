@@ -94,7 +94,7 @@ export type ParseDeedResponse = ParseDeedSuccess | ParseDeedError;
 export type ParcelSource = "auto" | "manual";
 
 /** Available satellite analysis layer types */
-export type SatelliteLayerType = "true-color" | "ndvi" | "ndmi" | "ndwi";
+export type SatelliteLayerType = "true-color" | "ndvi" | "ndmi" | "ndwi" | "radar";
 
 /** One category bucket from pixel analysis */
 export interface FieldCategory {

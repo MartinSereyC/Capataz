@@ -1,13 +1,19 @@
 "use client";
 
 /**
- * Hook to fetch and cache available Sentinel-2 dates for a parcel's bounding box.
- * Calls /api/satellite-dates and caches the result to avoid re-fetching on slider interaction.
+ * Hook to fetch and cache available Sentinel acquisition dates for a parcel's
+ * bounding box. Calls /api/satellite-dates and caches results per
+ * (bbox, from, to, collection) key to avoid re-fetching on slider interaction
+ * or when switching layers.
+ *
+ * Supports both Sentinel-2 (optical, default) and Sentinel-1 (radar).
  */
 
 import { useState, useEffect, useRef } from "react";
 import { SENTINEL_CONFIG } from "@/lib/constants";
 import type { BboxGeoJSON, SatelliteDatesResponse } from "@/types";
+
+type SentinelCollection = "sentinel-2-l2a" | "sentinel-1-grd";
 
 interface UseSatelliteDatesResult {
   dates: string[];
@@ -18,11 +24,15 @@ interface UseSatelliteDatesResult {
 
 /**
  * Fetches available satellite dates for the given bounding box.
- * Results are cached by bbox+fromDate+toDate key for the component lifetime.
+ * Results are cached by bbox+from+to+collection key for the component lifetime.
  *
- * @param bbox  GeoJSON bbox [minLng, minLat, maxLng, maxLat], or null if no parcel selected
+ * @param bbox        GeoJSON bbox [minLng, minLat, maxLng, maxLat], or null if no parcel selected
+ * @param collection  Sentinel collection to query (default: sentinel-2-l2a)
  */
-export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesResult {
+export function useSatelliteDates(
+  bbox: BboxGeoJSON | null,
+  collection: SentinelCollection = "sentinel-2-l2a",
+): UseSatelliteDatesResult {
   const [dates, setDates] = useState<string[]>([]);
   const [cloudCoverage, setCloudCoverage] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -40,7 +50,7 @@ export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesRe
       return;
     }
 
-    // Search a wider window (2x) to account for Sentinel-2 processing delays,
+    // Search a wider window (2x) to account for processing delays,
     // then trim results to 6 months anchored to the latest available image.
     const today = new Date();
     const fromDate = new Date(today);
@@ -49,7 +59,7 @@ export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesRe
     const toStr = today.toISOString().split("T")[0];
     const fromStr = fromDate.toISOString().split("T")[0];
     const bboxStr = bbox.join(",");
-    const cacheKey = `${bboxStr}|${fromStr}|${toStr}`;
+    const cacheKey = `${bboxStr}|${fromStr}|${toStr}|${collection}`;
 
     // Return from cache if available
     const cached = cache.current.get(cacheKey);
@@ -68,7 +78,7 @@ export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesRe
       setError(null);
 
       try {
-        const url = `/api/satellite-dates?bbox=${bboxStr}&from=${fromStr}&to=${toStr}`;
+        const url = `/api/satellite-dates?bbox=${bboxStr}&from=${fromStr}&to=${toStr}&collection=${collection}`;
         const res = await fetch(url);
 
         if (!res.ok) {
@@ -111,7 +121,7 @@ export function useSatelliteDates(bbox: BboxGeoJSON | null): UseSatelliteDatesRe
     return () => {
       cancelled = true;
     };
-  }, [bbox]);
+  }, [bbox, collection]);
 
   return { dates, cloudCoverage, loading, error };
 }

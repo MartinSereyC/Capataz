@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAvailableDates } from "@/lib/sentinel/dates";
+import { getAvailableDates, type SentinelCollection } from "@/lib/sentinel/dates";
 import type { BboxGeoJSON } from "@/types";
 
 export async function GET(req: NextRequest) {
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const bboxParam = searchParams.get("bbox");
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
+  const collectionParam = searchParams.get("collection");
 
   if (!bboxParam || !fromParam || !toParam) {
     return NextResponse.json(
@@ -32,8 +33,14 @@ export async function GET(req: NextRequest) {
 
   const bbox = parts as BboxGeoJSON;
 
+  const validCollections: SentinelCollection[] = ["sentinel-2-l2a", "sentinel-1-grd"];
+  const collection: SentinelCollection =
+    collectionParam && validCollections.includes(collectionParam as SentinelCollection)
+      ? (collectionParam as SentinelCollection)
+      : "sentinel-2-l2a";
+
   try {
-    const result = await getAvailableDates(bbox, fromParam, toParam);
+    const result = await getAvailableDates(bbox, fromParam, toParam, collection);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

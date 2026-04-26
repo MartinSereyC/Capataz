@@ -113,27 +113,42 @@ export function FieldHealthDashboard() {
 
       {open && (
         <div className="px-4 pb-4 flex flex-col gap-3 border-t border-gray-100">
-          {/* True-color notice */}
-          {selectedLayerType === "true-color" && (
-            <p className="text-gray-500 text-xs pt-3 leading-snug">
-              {es.analysis.selectAnalysisLayer}
-            </p>
-          )}
+          {(() => {
+            const isAnalyzable =
+              selectedLayerType !== "true-color" && selectedLayerType !== "radar";
+            return (
+              <>
+                {/* Radar notice */}
+                {selectedLayerType === "radar" && (
+                  <p className="text-gray-500 text-xs pt-3 leading-snug">
+                    {es.analysis.radarNotAnalyzable}
+                  </p>
+                )}
 
-          {/* Loading */}
-          {selectedLayerType !== "true-color" && loading && (
-            <p className="text-gray-400 text-xs pt-3">{es.analysis.loading}</p>
-          )}
+                {/* True-color notice */}
+                {selectedLayerType === "true-color" && (
+                  <p className="text-gray-500 text-xs pt-3 leading-snug">
+                    {es.analysis.selectAnalysisLayer}
+                  </p>
+                )}
 
-          {/* Error */}
-          {selectedLayerType !== "true-color" && !loading && error && error !== "no-data" && (
-            <p className="text-red-500 text-xs pt-3">{es.analysis.error}</p>
-          )}
+                {/* Loading */}
+                {isAnalyzable && loading && (
+                  <p className="text-gray-400 text-xs pt-3">{es.analysis.loading}</p>
+                )}
 
-          {/* No data */}
-          {selectedLayerType !== "true-color" && !loading && (error === "no-data" || (!analysis && !error)) && (
-            <p className="text-gray-400 text-xs pt-3">{es.analysis.noData}</p>
-          )}
+                {/* Error */}
+                {isAnalyzable && !loading && error && error !== "no-data" && (
+                  <p className="text-red-500 text-xs pt-3">{es.analysis.error}</p>
+                )}
+
+                {/* No data */}
+                {isAnalyzable && !loading && (error === "no-data" || (!analysis && !error)) && (
+                  <p className="text-gray-400 text-xs pt-3">{es.analysis.noData}</p>
+                )}
+              </>
+            );
+          })()}
 
           {/* Analysis results */}
           {analysis && !loading && (

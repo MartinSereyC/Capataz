@@ -74,7 +74,7 @@ export async function analyzeFieldImage(
   layerType: SatelliteLayerType,
   areaHectares: number,
 ): Promise<FieldAnalysis | null> {
-  if (layerType === "true-color") return null;
+  if (layerType === "true-color" || layerType === "radar") return null;
 
   const centroids = getCentroids(layerType);
 

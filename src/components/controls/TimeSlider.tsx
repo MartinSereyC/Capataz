@@ -15,6 +15,8 @@ interface TimeSliderProps {
   cloudCoverage: Record<string, number>;
   selectedDate: string | null;
   onDateChange: (date: string) => void;
+  /** When true, hides cloud coverage indicator and shows a radar note instead. */
+  isRadar?: boolean;
 }
 
 /** Format YYYY-MM-DD to a readable Spanish date, e.g. "12 ene 2025" */
@@ -35,7 +37,7 @@ function cloudColor(pct: number): string {
   return "text-red-500";
 }
 
-export function TimeSlider({ dates, cloudCoverage, selectedDate, onDateChange }: TimeSliderProps) {
+export function TimeSlider({ dates, cloudCoverage, selectedDate, onDateChange, isRadar = false }: TimeSliderProps) {
   // Find the index of the currently selected date (default to last)
   const currentIndex = selectedDate ? Math.max(0, dates.indexOf(selectedDate)) : Math.max(0, dates.length - 1);
   const [sliderIndex, setSliderIndex] = useState(currentIndex);
@@ -100,14 +102,20 @@ export function TimeSlider({ dates, cloudCoverage, selectedDate, onDateChange }:
         {es.slider.title}
       </h3>
 
-      {/* Selected date + cloud coverage */}
-      <div className="flex items-center justify-between text-sm">
+      {/* Selected date + cloud coverage (or radar note) */}
+      <div className="flex items-center justify-between text-sm gap-2">
         <span className="font-medium text-gray-800">
           {es.slider.dateLabel}: <span className="text-green-700">{formatDate(activeDate)}</span>
         </span>
-        <span className={`font-medium ${cloudColor(coverage)}`}>
-          {es.slider.cloudCoverage}: {coverage}%
-        </span>
+        {isRadar ? (
+          <span className="font-medium text-indigo-600 text-xs">
+            {es.slider.radarNote}
+          </span>
+        ) : (
+          <span className={`font-medium ${cloudColor(coverage)}`}>
+            {es.slider.cloudCoverage}: {coverage}%
+          </span>
+        )}
       </div>
 
       {/* Range input with arrow buttons */}

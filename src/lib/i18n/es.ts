@@ -68,6 +68,7 @@ export const es = {
     cloudCoverage: "Nubosidad",
     noImages: "No hay imágenes disponibles para este período.",
     dateLabel: "Fecha",
+    radarNote: "Radar — atraviesa las nubes",
   },
   errors: {
     generic: "Ocurrió un error inesperado. Intente nuevamente.",
@@ -94,9 +95,14 @@ export const es = {
     recommendations: "Recomendaciones",
     hectares: "ha",
     selectAnalysisLayer: "Selecciona una capa de análisis (NDVI, NDMI o NDWI) para ver estadísticas del campo.",
+    radarNotAnalyzable: "El radar es una vista visual — el análisis por zonas se aplica a las capas de vegetación, humedad y agua.",
     loading: "Analizando imagen...",
     error: "No se pudo analizar la imagen.",
     noData: "Sin datos para analizar.",
+  },
+  tooltip: {
+    openHelp: "Ver explicación",
+    closeHelp: "Cerrar explicación",
   },
 } as const;
 

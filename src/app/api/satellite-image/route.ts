@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const VALID_LAYERS: SatelliteLayerType[] = ["true-color", "ndvi", "ndmi", "ndwi"];
+  const VALID_LAYERS: SatelliteLayerType[] = ["true-color", "ndvi", "ndmi", "ndwi", "radar"];
   const layerType: SatelliteLayerType = (
     typeof rawLayerType === "string" && VALID_LAYERS.includes(rawLayerType as SatelliteLayerType)
       ? rawLayerType as SatelliteLayerType

@@ -21,6 +21,7 @@ export default function ResultadoPage() {
     availableDates,
     cloudCoverage,
     selectedDate,
+    selectedLayerType,
     setSelectedDate,
     setDates,
     overlayVisible,
@@ -28,27 +29,57 @@ export default function ResultadoPage() {
 
   const [drawMode, setDrawMode] = useState(false);
 
-  // Fetch satellite dates when parcel exists
-  // The hook caches internally so re-renders don't re-fetch
+  // Fetch Sentinel-2 (optical) dates for the 4 optical layers.
   const {
-    dates: fetchedDates,
-    cloudCoverage: fetchedCoverage,
-    loading: datesLoading,
-    error: datesError,
-  } = useSatelliteDates(parcel?.bbox ?? null);
+    dates: opticalDates,
+    cloudCoverage: opticalCoverage,
+    loading: opticalLoading,
+    error: opticalError,
+  } = useSatelliteDates(parcel?.bbox ?? null, "sentinel-2-l2a");
+
+  // Fetch Sentinel-1 (radar) dates on the side. The hook caches per collection,
+  // so toggling between layers feels instant after the first load.
+  const {
+    dates: radarDates,
+    cloudCoverage: radarCoverage,
+    loading: radarLoading,
+    error: radarError,
+  } = useSatelliteDates(parcel?.bbox ?? null, "sentinel-1-grd");
+
+  const isRadar = selectedLayerType === "radar";
 
   const [datesErrorDismissed, setDatesErrorDismissed] = useState(false);
 
-  // Sync fetched dates into context (if not already loaded from upload flow)
+  // Sync fetched Sentinel-2 dates into context (if not already loaded from upload flow).
+  // The context is the canonical Sentinel-2 source shared with the upload flow.
   useEffect(() => {
-    if (fetchedDates.length > 0 && availableDates.length === 0) {
-      setDates(fetchedDates, fetchedCoverage);
+    if (opticalDates.length > 0 && availableDates.length === 0) {
+      setDates(opticalDates, opticalCoverage);
     }
-  }, [fetchedDates, fetchedCoverage, availableDates.length, setDates]);
+  }, [opticalDates, opticalCoverage, availableDates.length, setDates]);
 
-  // Use context dates (may come from upload flow or from hook sync above)
-  const dates = availableDates.length > 0 ? availableDates : fetchedDates;
-  const coverage = Object.keys(cloudCoverage).length > 0 ? cloudCoverage : fetchedCoverage;
+  // Effective date list + coverage depend on active layer.
+  const dates = isRadar
+    ? radarDates
+    : availableDates.length > 0
+      ? availableDates
+      : opticalDates;
+  const coverage = isRadar
+    ? radarCoverage
+    : Object.keys(cloudCoverage).length > 0
+      ? cloudCoverage
+      : opticalCoverage;
+  const datesLoading = isRadar ? radarLoading : opticalLoading;
+  const datesError = isRadar ? radarError : opticalError;
+
+  // When the user flips between optical and radar, the current selectedDate
+  // usually does not exist in the other collection. Snap to the latest date
+  // available in the active list so the slider and overlay stay in sync.
+  useEffect(() => {
+    if (dates.length === 0) return;
+    if (selectedDate && dates.includes(selectedDate)) return;
+    setSelectedDate(dates[dates.length - 1]);
+  }, [dates, selectedDate, setSelectedDate]);
 
   const handleManualConfirm = useCallback(
     (drawnParcel: Parcel) => {
@@ -187,6 +218,7 @@ export default function ResultadoPage() {
                 cloudCoverage={coverage}
                 selectedDate={selectedDate}
                 onDateChange={handleDateChange}
+                isRadar={isRadar}
               />
             ) : parcel && datesLoading ? (
               <p className="text-gray-400 text-sm py-3">

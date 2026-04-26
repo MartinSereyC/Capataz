@@ -80,6 +80,45 @@ function evaluatePixel(sample) {
     return [0.05, 0.15, 0.55];
   }
 }`,
+
+  radar: `//VERSION=3
+// Sentinel-1 false-color radar composite.
+// VV and VH are linear backscatter in power. We convert to dB, stretch to 0-1
+// and build an RGB where:
+//   Red   = VV (surface roughness / built / bare soil)
+//   Green = VH (volume scattering / vegetation)
+//   Blue  = VV/VH ratio (water + smooth surfaces)
+// Result: vegetation -> green, bare soil -> brownish, water -> near black.
+function setup() {
+  return {
+    input: [{ bands: ["VV", "VH"] }],
+    output: { bands: 3 }
+  };
+}
+
+function toDb(linear) {
+  return 10 * Math.log(Math.max(linear, 1e-6)) / Math.LN10;
+}
+
+function stretch(db, minDb, maxDb) {
+  var v = (db - minDb) / (maxDb - minDb);
+  if (v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
+}
+
+function evaluatePixel(sample) {
+  var vvDb = toDb(sample.VV);
+  var vhDb = toDb(sample.VH);
+
+  // Typical Sentinel-1 IW GRD dB ranges for land scenes.
+  var r = stretch(vvDb, -20, 0);
+  var g = stretch(vhDb, -25, -5);
+  var ratio = vvDb - vhDb; // dB ratio
+  var b = stretch(ratio, 0, 15);
+
+  return [r, g, b];
+}`,
 };
 
 export default EVALSCRIPTS;

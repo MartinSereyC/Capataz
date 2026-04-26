@@ -69,23 +69,43 @@ export function buildProcessApiBody(
   layerType: SatelliteLayerType = "true-color",
 ): object {
   const [minLng, minLat, maxLng, maxLat] = bbox;
+
+  const isRadar = layerType === "radar";
+
+  const dataEntry = isRadar
+    ? {
+        type: "sentinel-1-grd",
+        dataFilter: {
+          timeRange: {
+            from: `${date}T00:00:00Z`,
+            to: `${date}T23:59:59Z`,
+          },
+          acquisitionMode: "IW",
+          polarization: "DV",
+          resolution: "HIGH",
+        },
+        processing: {
+          backCoeff: "SIGMA0_ELLIPSOID",
+          orthorectify: true,
+        },
+      }
+    : {
+        type: SENTINEL_CONFIG.collection,
+        dataFilter: {
+          timeRange: {
+            from: `${date}T00:00:00Z`,
+            to: `${date}T23:59:59Z`,
+          },
+        },
+      };
+
   return {
     input: {
       bounds: {
         bbox: [minLng, minLat, maxLng, maxLat],
         properties: { crs: "http://www.opengis.net/def/crs/EPSG/0/4326" },
       },
-      data: [
-        {
-          type: SENTINEL_CONFIG.collection,
-          dataFilter: {
-            timeRange: {
-              from: `${date}T00:00:00Z`,
-              to: `${date}T23:59:59Z`,
-            },
-          },
-        },
-      ],
+      data: [dataEntry],
     },
     output: {
       width,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParcelContext } from "@/context/ParcelContext";
 import { SATELLITE_LAYERS } from "@/lib/satellite-layers";
 import { es } from "@/lib/i18n/es";
+import { InfoTooltip } from "@/components/controls/InfoTooltip";
 
 export function LayerSelector() {
   const { selectedLayerType, setSelectedLayerType, overlayVisible, setOverlayVisible } = useParcelContext();
@@ -66,7 +67,14 @@ export function LayerSelector() {
 
       {/* Legend bar for active layer */}
       <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow border border-gray-200 px-3 py-2">
-        <p className="text-[10px] font-medium text-gray-500 mb-1">{es.layers.legend}</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] font-medium text-gray-500">{es.layers.legend}</p>
+          <InfoTooltip
+            title={activeMeta.help.title}
+            body={activeMeta.help.body}
+            placement="bottom-left"
+          />
+        </div>
         <div className="flex items-center gap-0.5">
           {activeMeta.legend.map((stop) => (
             <div key={stop.label} className="flex-1 flex flex-col items-center gap-0.5">
