@@ -1,10 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import type L from "leaflet";
 import { Icons } from "@/components/ui/Icons";
 import { Btn } from "@/components/ui/Btn";
 import { TextField } from "@/components/ui/TextField";
+import type { BasemapType } from "@/lib/constants";
+import { NOMINATIM_CONFIG } from "@/lib/constants";
+import { searchLocation } from "@/lib/geo/geocode";
+import { es } from "@/lib/i18n/es";
+import type { GeocodingResult } from "@/types";
+import type { ManualDrawApi } from "@/components/map/ManualDraw";
 
 // Dynamic import — Leaflet requires browser APIs
 const MapContainer = dynamic(
@@ -19,10 +26,38 @@ const MapContainer = dynamic(
   }
 );
 
+const BASEMAP_OPTIONS: { id: BasemapType; label: string }[] = [
+  { id: "street", label: es.map.basemapStreet },
+  { id: "satellite", label: es.map.basemapSatellite },
+  { id: "hybrid", label: es.map.basemapHybrid },
+];
+
 export default function MapaPage() {
   const [drawn, setDrawn] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Map wiring
+  const mapRef = useRef<L.Map | null>(null);
+  const [basemap, setBasemap] = useState<BasemapType>("hybrid");
+  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Manual draw wiring
+  const drawApiRef = useRef<ManualDrawApi | null>(null);
+  const [pointCount, setPointCount] = useState(0);
+  const [editing, setEditing] = useState(false);
+
+  // Step-card dismiss
+  const [stepCardOpen, setStepCardOpen] = useState(true);
+
+  // Search state
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GeocodingResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
 
   // Save modal form state
   const [farmName, setFarmName] = useState('');
@@ -37,6 +72,81 @@ export default function MapaPage() {
     window.location.href = '/zonas';
   }
 
+  const handleDrawApiReady = useCallback((api: ManualDrawApi) => {
+    drawApiRef.current = api;
+  }, []);
+
+  // Clicking Guardar: finalize polygon (if needed) and open the modal
+  const handleGuardarClick = useCallback(() => {
+    if (pointCount < 3) return;
+    if (!drawn) drawApiRef.current?.finish();
+    setSheetOpen(true);
+  }, [pointCount, drawn]);
+
+  // ── Search: debounced Nominatim call ──
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    setSearchError(false);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (value.length < NOMINATIM_CONFIG.minQueryLength) {
+      setResults([]);
+      setResultsOpen(false);
+      setSearching(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setSearching(true);
+      try {
+        const found = await searchLocation(value, controller.signal);
+        setResults(found);
+        setResultsOpen(true);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setSearchError(true);
+      } finally {
+        setSearching(false);
+      }
+    }, NOMINATIM_CONFIG.debounceMs);
+  }, []);
+
+  const handleSelectResult = useCallback((r: GeocodingResult) => {
+    // boundingbox: [south, north, west, east]
+    const [south, north, west, east] = r.boundingbox;
+    mapRef.current?.fitBounds([[south, west], [north, east]]);
+    setQuery('');
+    setResults([]);
+    setResultsOpen(false);
+  }, []);
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    function handleDown(e: MouseEvent) {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setResultsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleDown);
+    return () => document.removeEventListener('mousedown', handleDown);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  // Derived state for toolbar button enabled-ness
+  const hasPoints = pointCount > 0;
+  const canEdit = pointCount >= 3;
+  const canSave = pointCount >= 3;
+
   return (
     <div style={{ position: 'relative', overflow: 'hidden', height: '100vh', width: '100vw', fontFamily: "'Inter','Helvetica Neue',Arial,sans-serif" }}>
 
@@ -45,15 +155,23 @@ export default function MapaPage() {
         <MapContainer
           parcel={null}
           drawMode={true}
+          basemap={basemap}
+          onBasemapChange={setBasemap}
+          onMapReady={(m) => { mapRef.current = m; }}
+          onCenterChange={setCenter}
+          hideInMapControls={true}
           onManualConfirm={() => setDrawn(true)}
           onManualCancel={() => setDrawn(false)}
+          onManualDrawApi={handleDrawApiReady}
+          onPointsChange={setPointCount}
+          onEditChange={setEditing}
         />
       </div>
 
       {/* ── Top bar ── */}
       <div style={{
         position: 'absolute', top: 20, left: 20, right: 20, zIndex: 20,
-        display: 'flex', gap: 10, alignItems: 'center',
+        display: 'flex', gap: 10, alignItems: 'flex-start',
       }}>
         {/* Back */}
         <a href="/" style={{
@@ -68,63 +186,160 @@ export default function MapaPage() {
           </svg>
         </a>
 
-        {/* Search input */}
-        <div style={{
-          flex: 1, display: 'flex', alignItems: 'center', gap: 10,
-          background: '#fff', border: '1px solid var(--c-line)',
-          borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-soft)',
-          padding: '0 14px', height: 44,
-        }}>
-          <Icons.search size={16} style={{ color: 'var(--c-text-faint)', flexShrink: 0 }} />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar ubicación…"
-            style={{
-              flex: 1, border: 'none', outline: 'none', fontSize: 14,
-              color: 'var(--c-text)', background: 'transparent', fontFamily: 'inherit',
-            }}
-          />
-          <span style={{ fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-ibm-plex-mono,monospace)', flexShrink: 0 }}>
-            −34.17, −70.74
-          </span>
+        {/* Search input + dropdown */}
+        <div ref={searchWrapRef} style={{ flex: 1, position: 'relative' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: '#fff', border: '1px solid var(--c-line)',
+            borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-soft)',
+            padding: '0 14px', height: 44,
+          }}>
+            <Icons.search size={16} style={{ color: 'var(--c-text-faint)', flexShrink: 0 }} />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onFocus={() => { if (results.length > 0) setResultsOpen(true); }}
+              placeholder="Buscar ubicación…"
+              style={{
+                flex: 1, border: 'none', outline: 'none', fontSize: 14,
+                color: 'var(--c-text)', background: 'transparent', fontFamily: 'inherit',
+              }}
+            />
+            <span style={{ fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-ibm-plex-mono,monospace)', flexShrink: 0 }}>
+              {center ? `${center.lat.toFixed(2)}, ${center.lng.toFixed(2)}` : '—'}
+            </span>
+          </div>
+
+          {resultsOpen && query.length >= NOMINATIM_CONFIG.minQueryLength && (
+            <div style={{
+              position: 'absolute', top: 48, left: 0, right: 0,
+              background: '#fff', border: '1px solid var(--c-line)',
+              borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-card)',
+              overflow: 'hidden', zIndex: 30,
+            }}>
+              {searching && (
+                <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--c-text-muted)' }}>
+                  {es.search.loading}
+                </div>
+              )}
+              {!searching && searchError && (
+                <div style={{ padding: '10px 14px', fontSize: 13, color: '#b91c1c' }}>
+                  {es.search.error}
+                </div>
+              )}
+              {!searching && !searchError && results.length === 0 && (
+                <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--c-text-muted)' }}>
+                  {es.search.noResults}
+                </div>
+              )}
+              {!searching && results.map((r) => (
+                <button
+                  key={`${r.lat}-${r.lng}`}
+                  type="button"
+                  onClick={() => handleSelectResult(r)}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '10px 14px', fontSize: 13, color: 'var(--c-text)',
+                    background: 'transparent', border: 'none', borderBottom: '1px solid var(--c-line)',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {r.displayName}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Híbrido button */}
-        <button style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          height: 44, padding: '0 14px', borderRadius: 'var(--r-lg)',
-          background: '#fff', border: '1px solid var(--c-line)',
-          boxShadow: 'var(--shadow-soft)', fontSize: 13, fontWeight: 600,
-          color: 'var(--c-text)', cursor: 'pointer', flexShrink: 0,
-        }}>
-          <Icons.layers size={16} />
-          Híbrido
-        </button>
+        {/* Basemap segmented control — always visible */}
+        <div
+          style={{
+            display: 'flex', alignItems: 'center',
+            height: 44, padding: 4, gap: 2,
+            background: '#fff', border: '1px solid var(--c-line)',
+            borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-soft)',
+            flexShrink: 0,
+          }}
+        >
+          {BASEMAP_OPTIONS.map((opt) => {
+            const active = opt.id === basemap;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setBasemap(opt.id)}
+                style={{
+                  height: 36, padding: '0 14px', borderRadius: 'calc(var(--r-lg) - 4px)',
+                  fontSize: 13, fontWeight: active ? 700 : 500,
+                  color: active ? '#fff' : 'var(--c-text-muted)',
+                  background: active ? 'var(--accent)' : 'transparent',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── Drawing toolbar ── */}
+      {/* ── Drawing toolbar (functional) ── */}
       <div style={{
         position: 'absolute', top: 90, left: 20, zIndex: 20,
         display: 'flex', flexDirection: 'column', gap: 4,
       }}>
-        {[
-          { icon: <Icons.polygon size={18} />, label: 'Polígono', active: true },
-          { icon: <Icons.undo size={18} />, label: 'Deshacer', active: false },
-          { icon: <Icons.trash size={18} />, label: 'Limpiar', active: false },
-        ].map(({ icon, label, active }) => (
+        {([
+          {
+            key: 'draw',
+            icon: <Icons.polygon size={18} />,
+            label: editing ? 'Volver a dibujar' : 'Dibujar polígono',
+            active: !editing,
+            disabled: false,
+            onClick: () => { if (editing) drawApiRef.current?.setEdit(false); },
+          },
+          {
+            key: 'edit',
+            icon: <Icons.pencil size={18} />,
+            label: 'Editar vértices',
+            active: editing,
+            disabled: !canEdit,
+            onClick: () => drawApiRef.current?.toggleEdit(),
+          },
+          {
+            key: 'undo',
+            icon: <Icons.undo size={18} />,
+            label: 'Deshacer último',
+            active: false,
+            disabled: !hasPoints,
+            onClick: () => drawApiRef.current?.undo(),
+          },
+          {
+            key: 'clear',
+            icon: <Icons.trash size={18} />,
+            label: 'Limpiar todo',
+            active: false,
+            disabled: !hasPoints,
+            onClick: () => { drawApiRef.current?.clear(); setDrawn(false); },
+          },
+        ] as const).map(({ key, icon, label, active, disabled, onClick }) => (
           <button
-            key={label}
+            key={key}
+            type="button"
             title={label}
+            onClick={onClick}
+            disabled={disabled}
             style={{
               width: 44, height: 44, borderRadius: 'var(--r-lg)',
               background: active ? 'var(--accent)' : '#fff',
               border: active ? 'none' : '1px solid var(--c-line)',
-              color: active ? '#fff' : 'var(--c-text-muted)',
+              color: active ? '#fff' : disabled ? 'var(--c-line-strong)' : 'var(--c-text-muted)',
               boxShadow: 'var(--shadow-soft)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.5 : 1,
+              transition: 'background 0.15s, color 0.15s, opacity 0.15s',
             }}
           >
             {icon}
@@ -132,37 +347,56 @@ export default function MapaPage() {
         ))}
       </div>
 
-      {/* ── Hint card (desktop) ── */}
-      <div style={{
-        position: 'absolute', top: 90, right: 20, zIndex: 20,
-        width: 320, background: '#fff', borderRadius: 'var(--r-xl)',
-        border: '1px solid var(--c-line)', boxShadow: 'var(--shadow-card)',
-        padding: '20px 22px',
-      }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 10 }}>
-          Paso 1 de 3
-        </p>
-        <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.4, marginBottom: 10, color: 'var(--c-text)' }}>
-          Dibuja el contorno de tu predio
-        </h2>
-        <p style={{ fontSize: 13, color: 'var(--c-text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
-          Haz click en el mapa para ir marcando los vértices del límite de tu campo. Cierra el polígono haciendo doble click en el último punto.
-        </p>
+      {/* ── Hint card (desktop) — dismissable ── */}
+      {stepCardOpen && (
         <div style={{
-          background: 'var(--accent-soft)', border: '1px solid var(--accent-line)',
-          borderRadius: 'var(--r-md)', padding: '10px 14px',
+          position: 'absolute', top: 90, right: 20, zIndex: 20,
+          width: 320, background: '#fff', borderRadius: 'var(--r-xl)',
+          border: '1px solid var(--c-line)', boxShadow: 'var(--shadow-card)',
+          padding: '20px 22px',
         }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-deep)' }}>
-            💡 TIP
+          <button
+            type="button"
+            onClick={() => setStepCardOpen(false)}
+            aria-label="Cerrar"
+            style={{
+              position: 'absolute', top: 10, right: 10,
+              width: 28, height: 28, borderRadius: 8,
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--c-text-muted)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, lineHeight: 1,
+            }}
+          >
+            <svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+              <path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 10 }}>
+            Paso 1 de 3
           </p>
-          <p style={{ fontSize: 12, color: 'var(--accent-deep)', lineHeight: 1.5, marginTop: 3 }}>
-            Usa la vista satélite para trazar el límite con precisión sobre las imágenes reales de tu campo.
+          <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.4, marginBottom: 10, color: 'var(--c-text)' }}>
+            Dibuja el contorno de tu predio
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--c-text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
+            Haz clic en el mapa para marcar cada vértice del límite de tu campo. Con al menos 3 puntos puedes presionar <strong>Guardar predio</strong> para cerrar el perímetro, o ajustar los vértices con la herramienta de edición (lápiz).
           </p>
+          <div style={{
+            background: 'var(--accent-soft)', border: '1px solid var(--accent-line)',
+            borderRadius: 'var(--r-md)', padding: '10px 14px',
+          }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-deep)' }}>
+              💡 TIP
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--accent-deep)', lineHeight: 1.5, marginTop: 3 }}>
+              Usa la vista satélite o híbrido para trazar el límite con precisión sobre las imágenes reales de tu campo.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Measurement chip (when drawn) ── */}
-      {drawn && (
+      {pointCount > 0 && (
         <div style={{
           position: 'absolute', bottom: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
           background: 'rgba(20,25,20,0.85)', backdropFilter: 'blur(8px)',
@@ -170,7 +404,9 @@ export default function MapaPage() {
           fontSize: 13, fontWeight: 600, color: '#fff',
           whiteSpace: 'nowrap', letterSpacing: 0.2,
         }}>
-          7 puntos · 42.3 ha · 2.7 km perímetro
+          {pointCount} punto{pointCount !== 1 ? 's' : ''}
+          {editing && ' · editando vértices'}
+          {!editing && pointCount >= 3 && ' · listo para guardar'}
         </div>
       )}
 
@@ -179,20 +415,34 @@ export default function MapaPage() {
         position: 'absolute', right: 20, bottom: 140, zIndex: 20,
         display: 'flex', flexDirection: 'column', gap: 2,
       }}>
-        {['+', '−'].map((label) => (
-          <button
-            key={label}
-            style={{
-              width: 40, height: 40, borderRadius: label === '+' ? '8px 8px 0 0' : '0 0 8px 8px',
-              background: '#fff', border: '1px solid var(--c-line)',
-              boxShadow: 'var(--shadow-soft)', fontSize: 18, fontWeight: 400,
-              color: 'var(--c-text)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            {label}
-          </button>
-        ))}
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomIn()}
+          aria-label="Acercar"
+          style={{
+            width: 40, height: 40, borderRadius: '8px 8px 0 0',
+            background: '#fff', border: '1px solid var(--c-line)',
+            boxShadow: 'var(--shadow-soft)', fontSize: 18, fontWeight: 400,
+            color: 'var(--c-text)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomOut()}
+          aria-label="Alejar"
+          style={{
+            width: 40, height: 40, borderRadius: '0 0 8px 8px',
+            background: '#fff', border: '1px solid var(--c-line)',
+            boxShadow: 'var(--shadow-soft)', fontSize: 18, fontWeight: 400,
+            color: 'var(--c-text)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          −
+        </button>
       </div>
 
       {/* ── Save button (bottom full width) ── */}
@@ -202,12 +452,12 @@ export default function MapaPage() {
         padding: '20px 20px 24px',
       }}>
         <button
-          onClick={() => drawn && setSheetOpen(true)}
-          disabled={!drawn}
+          onClick={handleGuardarClick}
+          disabled={!canSave}
           style={{
             width: '100%', height: 72, borderRadius: 'var(--r-xl)',
-            background: drawn ? 'var(--accent)' : 'var(--c-line-strong)',
-            color: '#fff', border: 'none', cursor: drawn ? 'pointer' : 'not-allowed',
+            background: canSave ? 'var(--accent)' : 'var(--c-line-strong)',
+            color: '#fff', border: 'none', cursor: canSave ? 'pointer' : 'not-allowed',
             fontSize: 18, fontWeight: 700, letterSpacing: -0.3,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             transition: 'background 0.2s',

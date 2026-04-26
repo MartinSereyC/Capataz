@@ -1,7 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type L from "leaflet";
 import type { Parcel } from "@/types";
+import type { BasemapType } from "@/lib/constants";
+import type { ManualDrawApi } from "./ManualDraw";
 
 // Dynamically import the Leaflet map to prevent SSR errors.
 // Leaflet requires browser APIs (window, document) that don't exist on the server.
@@ -21,6 +24,14 @@ interface MapContainerProps {
   availableDates?: string[];
   onManualConfirm?: (parcel: Parcel) => void;
   onManualCancel?: () => void;
+  basemap?: BasemapType;
+  onBasemapChange?: (basemap: BasemapType) => void;
+  onMapReady?: (map: L.Map) => void;
+  onCenterChange?: (center: { lat: number; lng: number }) => void;
+  hideInMapControls?: boolean;
+  onManualDrawApi?: (api: ManualDrawApi) => void;
+  onPointsChange?: (count: number) => void;
+  onEditChange?: (editing: boolean) => void;
 }
 
 /**
@@ -34,6 +45,14 @@ export function MapContainer({
   availableDates = [],
   onManualConfirm,
   onManualCancel,
+  basemap,
+  onBasemapChange,
+  onMapReady,
+  onCenterChange,
+  hideInMapControls,
+  onManualDrawApi,
+  onPointsChange,
+  onEditChange,
 }: MapContainerProps) {
   return (
     <div className="relative h-full w-full">
@@ -44,6 +63,14 @@ export function MapContainer({
         availableDates={availableDates}
         onManualConfirm={onManualConfirm ?? (() => {})}
         onManualCancel={onManualCancel ?? (() => {})}
+        basemap={basemap}
+        onBasemapChange={onBasemapChange}
+        onMapReady={onMapReady}
+        onCenterChange={onCenterChange}
+        hideInMapControls={hideInMapControls}
+        onManualDrawApi={onManualDrawApi}
+        onPointsChange={onPointsChange}
+        onEditChange={onEditChange}
       />
     </div>
   );
