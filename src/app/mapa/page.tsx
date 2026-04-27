@@ -10,7 +10,7 @@ import type { BasemapType } from "@/lib/constants";
 import { NOMINATIM_CONFIG } from "@/lib/constants";
 import { searchLocation } from "@/lib/geo/geocode";
 import { es } from "@/lib/i18n/es";
-import type { GeocodingResult } from "@/types";
+import type { GeocodingResult, Parcel } from "@/types";
 import type { ManualDrawApi } from "@/components/map/ManualDraw";
 
 // Dynamic import — Leaflet requires browser APIs
@@ -33,7 +33,25 @@ const BASEMAP_OPTIONS: { id: BasemapType; label: string }[] = [
 ];
 
 export default function MapaPage() {
-  const [drawn, setDrawn] = useState(false);
+  // Hydrate from a previously-saved parcel so going "back" from /zonas
+  // re-opens the existing farm for editing instead of a blank canvas.
+  const [savedParcel] = useState<Parcel | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('capataz_parcel');
+      return raw ? (JSON.parse(raw) as Parcel) : null;
+    } catch { return null; }
+  });
+  const [savedFarm] = useState<{ farmName: string; owner: string; email: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('capataz_farm');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+
+  const initialDrawPoints = savedParcel?.coordinates;
+
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // Map wiring
@@ -43,7 +61,8 @@ export default function MapaPage() {
 
   // Manual draw wiring
   const drawApiRef = useRef<ManualDrawApi | null>(null);
-  const [pointCount, setPointCount] = useState(0);
+  const parcelRef = useRef<Parcel | null>(savedParcel);
+  const [pointCount, setPointCount] = useState(savedParcel ? savedParcel.coordinates.length : 0);
   const [editing, setEditing] = useState(false);
 
   // Step-card dismiss
@@ -59,29 +78,59 @@ export default function MapaPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
 
-  // Save modal form state
-  const [farmName, setFarmName] = useState('');
-  const [owner, setOwner] = useState('');
-  const [email, setEmail] = useState('');
+  // Save modal form state — pre-fill if the user is returning to edit
+  const [farmName, setFarmName] = useState(savedFarm?.farmName ?? '');
+  const [owner, setOwner] = useState(savedFarm?.owner ?? '');
+  const [email, setEmail] = useState(savedFarm?.email ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   function handleSave() {
     if (!farmName || !email) return;
+    if (!parcelRef.current) return;
     localStorage.setItem('capataz_farm', JSON.stringify({ farmName, owner, email }));
+    localStorage.setItem('capataz_parcel', JSON.stringify(parcelRef.current));
     window.location.href = '/zonas';
   }
 
+  const isEditingExisting = !!savedParcel && !!savedFarm;
+
   const handleDrawApiReady = useCallback((api: ManualDrawApi) => {
     drawApiRef.current = api;
+    // Auto-enter edit mode when re-opening an existing farm so vertices
+    // are immediately draggable without an extra click.
+    if (savedParcel) {
+      api.setEdit(true);
+    }
+  }, [savedParcel]);
+
+  const handleMapReady = useCallback((m: L.Map) => {
+    mapRef.current = m;
+    if (savedParcel) {
+      const [minLng, minLat, maxLng, maxLat] = savedParcel.bbox;
+      m.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [40, 40] });
+    }
+  }, [savedParcel]);
+
+  const handleManualConfirm = useCallback((p: Parcel) => {
+    parcelRef.current = p;
   }, []);
 
-  // Clicking Guardar: finalize polygon (if needed) and open the modal
+  // Clicking Guardar: finalize polygon (always re-finish so edits get captured)
+  // For new farms → open the account-creation modal.
+  // For existing farms → write straight back to localStorage and return to dashboard.
   const handleGuardarClick = useCallback(() => {
     if (pointCount < 3) return;
-    if (!drawn) drawApiRef.current?.finish();
+    drawApiRef.current?.finish();
+    if (isEditingExisting) {
+      if (parcelRef.current) {
+        localStorage.setItem('capataz_parcel', JSON.stringify(parcelRef.current));
+      }
+      window.location.href = '/dashboard';
+      return;
+    }
     setSheetOpen(true);
-  }, [pointCount, drawn]);
+  }, [pointCount, isEditingExisting]);
 
   // ── Search: debounced Nominatim call ──
   const handleQueryChange = useCallback((value: string) => {
@@ -157,11 +206,12 @@ export default function MapaPage() {
           drawMode={true}
           basemap={basemap}
           onBasemapChange={setBasemap}
-          onMapReady={(m) => { mapRef.current = m; }}
+          onMapReady={handleMapReady}
           onCenterChange={setCenter}
           hideInMapControls={true}
-          onManualConfirm={() => setDrawn(true)}
-          onManualCancel={() => setDrawn(false)}
+          initialDrawPoints={initialDrawPoints}
+          onManualConfirm={handleManualConfirm}
+          onManualCancel={() => { parcelRef.current = null; }}
           onManualDrawApi={handleDrawApiReady}
           onPointsChange={setPointCount}
           onEditChange={setEditing}
@@ -321,7 +371,7 @@ export default function MapaPage() {
             label: 'Limpiar todo',
             active: false,
             disabled: !hasPoints,
-            onClick: () => { drawApiRef.current?.clear(); setDrawn(false); },
+            onClick: () => { drawApiRef.current?.clear(); parcelRef.current = null; },
           },
         ] as const).map(({ key, icon, label, active, disabled, onClick }) => (
           <button
@@ -373,13 +423,15 @@ export default function MapaPage() {
             </svg>
           </button>
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 10 }}>
-            Paso 1 de 3
+            {isEditingExisting ? 'Editar predio' : 'Paso 1 de 3'}
           </p>
           <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.4, marginBottom: 10, color: 'var(--c-text)' }}>
-            Dibuja el contorno de tu predio
+            {isEditingExisting ? 'Ajusta el contorno de tu predio' : 'Dibuja el contorno de tu predio'}
           </h2>
           <p style={{ fontSize: 13, color: 'var(--c-text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
-            Haz clic en el mapa para marcar cada vértice del límite de tu campo. Con al menos 3 puntos puedes presionar <strong>Guardar predio</strong> para cerrar el perímetro, o ajustar los vértices con la herramienta de edición (lápiz).
+            {isEditingExisting
+              ? <>Arrastra cualquier vértice para ajustar el perímetro. También puedes deshacer o limpiar y empezar de nuevo. Cuando estés listo, presiona <strong>Guardar cambios</strong>.</>
+              : <>Haz clic en el mapa para marcar cada vértice del límite de tu campo. Con al menos 3 puntos puedes presionar <strong>Guardar predio</strong> para cerrar el perímetro, o ajustar los vértices con la herramienta de edición (lápiz).</>}
           </p>
           <div style={{
             background: 'var(--accent-soft)', border: '1px solid var(--accent-line)',
@@ -464,7 +516,7 @@ export default function MapaPage() {
           }}
         >
           <Icons.check size={22} />
-          Guardar predio
+          {isEditingExisting ? 'Guardar cambios' : 'Guardar predio'}
         </button>
       </div>
 

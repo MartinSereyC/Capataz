@@ -1,9 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Icons } from "@/components/ui/Icons";
 import { Btn } from "@/components/ui/Btn";
+import type { Parcel, GeoJSONPolygon, BboxGeoJSON } from "@/types";
+import type { ManualDrawApi } from "@/components/map/ManualDraw";
+import type { MapZone } from "@/components/map/MapContainer";
+import { polygonOnOrInsidePolygon } from "@/lib/geo/polygon-builder";
+import type { BasemapType } from "@/lib/constants";
 
 const MapContainer = dynamic(
   () => import("@/components/map/MapContainer").then((m) => m.MapContainer),
@@ -25,32 +30,27 @@ const CROPS = [
 
 interface ZoneItem {
   id: number;
+  name: string;
   crop: string;
   ha: number;
-  pts: string;
-}
-
-const DEMO_ZONES: ZoneItem[] = [
-  { id: 1, crop: 'Palta Hass',  ha: 8.2, pts: "20,22 40,18 44,44 22,48" },
-  { id: 2, crop: 'Palta Hass',  ha: 6.4, pts: "40,18 58,14 64,40 44,44" },
-  { id: 3, crop: 'Uva de mesa', ha: 7.1, pts: "58,14 86,28 82,50 64,40" },
-  { id: 4, crop: 'Cerezo',      ha: 5.8, pts: "22,48 44,44 48,70 26,72" },
-];
-
-function centroid(pts: string): [number, number] {
-  const pairs = pts.split(' ').map((p) => p.split(',').map(Number) as [number, number]);
-  return [
-    pairs.reduce((s, [x]) => s + x, 0) / pairs.length,
-    pairs.reduce((s, [, y]) => s + y, 0) / pairs.length,
-  ];
+  polygon: GeoJSONPolygon;
+  bbox: BboxGeoJSON;
 }
 
 const ZONE_COLORS = ['#2d6a3e', '#4a8a52', '#7aaa70', '#aac890'];
 
 export default function ZonasPage() {
-  const [zones, setZones] = useState<ZoneItem[]>(DEMO_ZONES);
+  const [zones, setZones] = useState<ZoneItem[]>([]);
   const [drawing, setDrawing] = useState(false);
+  const [pointCount, setPointCount] = useState(0);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const [selectedCrop, setSelectedCrop] = useState(CROPS[0]);
+  const selectedCropRef = useRef(CROPS[0]);
+  const [zoneName, setZoneName] = useState('');
+  const zoneNameRef = useRef('');
+  const [basemap, setBasemap] = useState<BasemapType>('satellite');
+  const drawApiRef = useRef<ManualDrawApi | null>(null);
+
   const [farmName] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -60,19 +60,83 @@ export default function ZonasPage() {
     }
     return 'Mi Campo';
   });
+  const [parcel] = useState<Parcel | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('capataz_parcel');
+        return raw ? (JSON.parse(raw) as Parcel) : null;
+      } catch { return null; }
+    }
+    return null;
+  });
+
+  const handleDrawApiReady = useCallback((api: ManualDrawApi) => {
+    drawApiRef.current = api;
+  }, []);
+
+  function startDrawing() {
+    setDrawError(null);
+    setPointCount(0);
+    setZoneName('');
+    zoneNameRef.current = '';
+    setDrawing(true);
+  }
+
+  function cancelDrawing() {
+    drawApiRef.current?.clear();
+    setDrawing(false);
+    setPointCount(0);
+    setDrawError(null);
+    setZoneName('');
+    zoneNameRef.current = '';
+  }
+
+  function saveZoneClick() {
+    if (pointCount < 3) return;
+    drawApiRef.current?.finish();
+  }
+
+  const handleManualConfirm = useCallback((p: Parcel) => {
+    if (!parcel) {
+      setDrawError('Falta el contorno del predio. Vuelve al paso 1.');
+      return;
+    }
+    if (!polygonOnOrInsidePolygon(p.polygon, parcel.polygon)) {
+      setDrawError('La zona debe quedar completamente dentro del predio.');
+      return;
+    }
+    setZones((prev) => {
+      const nextId = Math.max(0, ...prev.map((z) => z.id)) + 1;
+      const name = zoneNameRef.current.trim() || `Cuartel ${nextId}`;
+      return [
+        ...prev,
+        {
+          id: nextId,
+          name,
+          crop: selectedCropRef.current,
+          ha: +p.area_hectares.toFixed(1),
+          polygon: p.polygon,
+          bbox: p.bbox,
+        },
+      ];
+    });
+    setDrawing(false);
+    setPointCount(0);
+    setDrawError(null);
+    setZoneName('');
+    zoneNameRef.current = '';
+  }, [parcel]);
+
+  const handleManualCancel = useCallback(() => {
+    setDrawing(false);
+    setPointCount(0);
+    setDrawError(null);
+    setZoneName('');
+    zoneNameRef.current = '';
+  }, []);
 
   function deleteZone(id: number) {
     setZones((z) => z.filter((zone) => zone.id !== id));
-  }
-
-  function finishDrawing() {
-    // Add a mock zone from drawing
-    const nextId = Math.max(0, ...zones.map((z) => z.id)) + 1;
-    setZones((prev) => [
-      ...prev,
-      { id: nextId, crop: selectedCrop, ha: +(3 + Math.random() * 5).toFixed(1), pts: "26,72 48,70 50,84 34,82 14,60 22,48" },
-    ]);
-    setDrawing(false);
   }
 
   function handleSaveZones() {
@@ -81,6 +145,13 @@ export default function ZonasPage() {
   }
 
   const totalHa = zones.reduce((s, z) => s + z.ha, 0);
+
+  const mapZones: MapZone[] = zones.map((z, i) => ({
+    id: z.id,
+    polygon: z.polygon,
+    color: ZONE_COLORS[i % ZONE_COLORS.length],
+    label: z.name,
+  }));
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "'Inter','Helvetica Neue',Arial,sans-serif" }}>
@@ -127,7 +198,6 @@ export default function ZonasPage() {
                 padding: '12px 14px',
                 display: 'flex', alignItems: 'center', gap: 10,
               }}>
-                {/* Number badge */}
                 <div style={{
                   width: 28, height: 28, borderRadius: 'var(--r-md)',
                   background: ZONE_COLORS[i % ZONE_COLORS.length],
@@ -137,8 +207,8 @@ export default function ZonasPage() {
                   {z.id}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)' }}>{z.crop}</p>
-                  <p style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>{z.ha} ha</p>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)' }}>{z.name}</p>
+                  <p style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>{z.crop} · {z.ha} ha</p>
                 </div>
                 <button
                   onClick={() => deleteZone(z.id)}
@@ -165,11 +235,28 @@ export default function ZonasPage() {
               </p>
               <div style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-muted)', display: 'block', marginBottom: 6 }}>
+                  Nombre del cuartel
+                </label>
+                <input
+                  type="text"
+                  value={zoneName}
+                  onChange={(e) => { setZoneName(e.target.value); zoneNameRef.current = e.target.value; }}
+                  placeholder="Ej: Cuartel Norte"
+                  style={{
+                    width: '100%', height: 40, padding: '0 10px',
+                    borderRadius: 'var(--r-md)', border: '1.5px solid var(--accent-line)',
+                    background: '#fff', fontSize: 13, color: 'var(--c-text)',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-muted)', display: 'block', marginBottom: 6 }}>
                   Cultivo
                 </label>
                 <select
                   value={selectedCrop}
-                  onChange={(e) => setSelectedCrop(e.target.value)}
+                  onChange={(e) => { setSelectedCrop(e.target.value); selectedCropRef.current = e.target.value; }}
                   style={{
                     width: '100%', height: 40, padding: '0 10px',
                     borderRadius: 'var(--r-md)', border: '1.5px solid var(--accent-line)',
@@ -180,27 +267,38 @@ export default function ZonasPage() {
                   {CROPS.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
+              <p style={{ fontSize: 12, color: 'var(--c-text-muted)', marginBottom: 10 }}>
+                {pointCount} punto{pointCount !== 1 ? 's' : ''} marcado{pointCount !== 1 ? 's' : ''} · mínimo 3
+              </p>
+              {drawError && (
+                <p style={{ fontSize: 12, color: '#b91c1c', marginBottom: 10, lineHeight: 1.4 }}>
+                  {drawError}
+                </p>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
-                <Btn variant="primary" size="sm" full onClick={finishDrawing}>
-                  Terminar trazo
+                <Btn variant="primary" size="sm" full onClick={saveZoneClick} disabled={pointCount < 3}>
+                  Guardar zona
                 </Btn>
-                <Btn variant="secondary" size="sm" onClick={() => setDrawing(false)}>
+                <Btn variant="secondary" size="sm" onClick={cancelDrawing}>
                   Cancelar
                 </Btn>
               </div>
             </div>
           ) : (
             <button
-              onClick={() => setDrawing(true)}
+              onClick={startDrawing}
+              disabled={!parcel}
               style={{
                 width: '100%', border: '2px dashed var(--c-line-strong)',
                 borderRadius: 'var(--r-lg)', padding: '14px 0',
-                background: 'transparent', cursor: 'pointer',
+                background: 'transparent', cursor: parcel ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 fontSize: 14, fontWeight: 600, color: 'var(--c-text-muted)',
+                opacity: parcel ? 1 : 0.5,
                 transition: 'border-color 0.15s, color 0.15s',
               }}
               onMouseEnter={(e) => {
+                if (!parcel) return;
                 (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)';
                 (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)';
               }}
@@ -229,66 +327,69 @@ export default function ZonasPage() {
 
       {/* ── Right map area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <MapContainer parcel={null} drawMode={drawing} />
-
-        {/* SVG overlay with zone polygons */}
-        <svg
-          viewBox="0 0 100 100"
-          preserveAspectRatio="xMidYMid slice"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 5 }}
-        >
-          {/* Perimeter outline */}
-          <polygon
-            points="14,22 86,14 92,76 14,76"
-            fill="none"
-            stroke="#fff"
-            strokeWidth="0.6"
-            strokeDasharray="3 2"
-            opacity="0.7"
-          />
-          {zones.map((z, i) => {
-            const [cx, cy] = centroid(z.pts);
-            return (
-              <g key={z.id}>
-                <polygon
-                  points={z.pts}
-                  fill={ZONE_COLORS[i % ZONE_COLORS.length]}
-                  fillOpacity="0.4"
-                  stroke={ZONE_COLORS[i % ZONE_COLORS.length]}
-                  strokeWidth="0.5"
-                />
-                <circle cx={cx} cy={cy} r="3.2" fill="#fff" fillOpacity="0.9" />
-                <text x={cx} y={cy + 1.1} textAnchor="middle" fontSize="2.8" fontWeight="700"
-                  fill={ZONE_COLORS[i % ZONE_COLORS.length]} fontFamily="Inter,sans-serif">
-                  {z.id}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+        <MapContainer
+          parcel={parcel}
+          drawMode={drawing}
+          zones={mapZones}
+          onManualDrawApi={handleDrawApiReady}
+          onPointsChange={setPointCount}
+          onManualConfirm={handleManualConfirm}
+          onManualCancel={handleManualCancel}
+          basemap={basemap}
+          onBasemapChange={setBasemap}
+          hideInMapControls={true}
+          boundary={parcel?.polygon ?? undefined}
+        />
 
         {/* Drawing toolbar (top right) */}
         <div style={{
           position: 'absolute', top: 20, right: 20, zIndex: 20,
           display: 'flex', flexDirection: 'column', gap: 4,
         }}>
-          {[
-            { icon: <Icons.polygon size={18} />, label: 'Polígono', active: drawing },
-            { icon: <Icons.undo size={18} />, label: 'Deshacer' },
-            { icon: <Icons.layers size={18} />, label: 'Capas' },
-          ].map(({ icon, label, active }) => (
-            <button key={label} title={label} style={{
+          {/* Polygon — active indicator while drawing */}
+          <button title="Polígono" style={{
+            width: 44, height: 44, borderRadius: 'var(--r-lg)',
+            background: drawing ? 'var(--accent)' : '#fff',
+            border: drawing ? 'none' : '1px solid var(--c-line)',
+            color: drawing ? '#fff' : 'var(--c-text-muted)',
+            boxShadow: 'var(--shadow-soft)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'default',
+          }}>
+            <Icons.polygon size={18} />
+          </button>
+          {/* Undo — remove last vertex */}
+          <button
+            title="Deshacer"
+            onClick={() => drawApiRef.current?.undo()}
+            disabled={!drawing || pointCount === 0}
+            style={{
               width: 44, height: 44, borderRadius: 'var(--r-lg)',
-              background: active ? 'var(--accent)' : '#fff',
-              border: active ? 'none' : '1px solid var(--c-line)',
-              color: active ? '#fff' : 'var(--c-text-muted)',
+              background: '#fff', border: '1px solid var(--c-line)',
+              color: drawing && pointCount > 0 ? 'var(--c-text-muted)' : 'var(--c-line)',
+              boxShadow: 'var(--shadow-soft)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: drawing && pointCount > 0 ? 'pointer' : 'not-allowed',
+            }}
+          >
+            <Icons.undo size={18} />
+          </button>
+          {/* Capas — toggle satellite / hybrid */}
+          <button
+            title={basemap === 'hybrid' ? 'Ocultar etiquetas' : 'Mostrar etiquetas'}
+            onClick={() => setBasemap(basemap === 'hybrid' ? 'satellite' : 'hybrid')}
+            style={{
+              width: 44, height: 44, borderRadius: 'var(--r-lg)',
+              background: basemap === 'hybrid' ? 'var(--accent)' : '#fff',
+              border: basemap === 'hybrid' ? 'none' : '1px solid var(--c-line)',
+              color: basemap === 'hybrid' ? '#fff' : 'var(--c-text-muted)',
               boxShadow: 'var(--shadow-soft)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer',
-            }}>
-              {icon}
-            </button>
-          ))}
+            }}
+          >
+            <Icons.layers size={18} />
+          </button>
         </div>
 
         {/* Drawing hint pill */}

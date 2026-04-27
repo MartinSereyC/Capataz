@@ -5,6 +5,7 @@ import { useMap, Polygon, CircleMarker, Marker, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import type { Parcel, GeoJSONPolygon, BboxGeoJSON } from "@/types";
 import { es } from "@/lib/i18n/es";
+import { pointOnOrInsideRing } from "@/lib/geo/polygon-builder";
 
 export interface ManualDrawApi {
   undo: () => void;
@@ -20,12 +21,16 @@ interface ManualDrawProps {
   /** When true, suppresses the floating instruction banner and action buttons.
    *  The host page is expected to provide its own UI. */
   hideControls?: boolean;
+  /** Seed initial vertices (e.g. when re-opening a previously drawn polygon). */
+  initialPoints?: [number, number][];
   /** Fires with an imperative API for the host page to drive undo/clear/finish/edit. */
   onApiReady?: (api: ManualDrawApi) => void;
   /** Fires whenever the number of placed vertices changes. */
   onPointsChange?: (count: number) => void;
   /** Fires whenever edit mode is toggled. */
   onEditChange?: (editing: boolean) => void;
+  /** If provided, clicks outside this polygon boundary are ignored. */
+  boundary?: GeoJSONPolygon;
 }
 
 /**
@@ -73,9 +78,20 @@ const vertexEditIcon =
   typeof window !== "undefined"
     ? L.divIcon({
         className: "",
-        html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #16a34a;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:grab;"></div>',
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+        html: '<div style="width:20px;height:20px;border-radius:50%;background:#fff;border:2.5px solid #16a34a;box-shadow:0 1px 4px rgba(0,0,0,0.4);cursor:grab;"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      })
+    : undefined;
+
+// Midpoint handle icon — smaller, filled green, click to insert a new vertex
+const midpointIcon =
+  typeof window !== "undefined"
+    ? L.divIcon({
+        className: "",
+        html: '<div style="width:12px;height:12px;border-radius:50%;background:#22c55e;border:2px solid #16a34a;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;opacity:0.85;"></div>',
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
       })
     : undefined;
 
@@ -89,14 +105,18 @@ export function ManualDraw({
   onConfirm,
   onCancel,
   hideControls = false,
+  initialPoints,
   onApiReady,
   onPointsChange,
   onEditChange,
+  boundary,
 }: ManualDrawProps) {
   const map = useMap();
-  const [points, setPoints] = useState<[number, number][]>([]);
+  const [points, setPoints] = useState<[number, number][]>(() => initialPoints ?? []);
   const [editing, setEditing] = useState(false);
   const controlRef = useRef<HTMLDivElement>(null);
+  const boundaryRef = useRef<GeoJSONPolygon | undefined>(boundary);
+  useEffect(() => { boundaryRef.current = boundary; }, [boundary]);
 
   const pointsRef = useRef<[number, number][]>(points);
   useEffect(() => {
@@ -107,6 +127,17 @@ export function ManualDraw({
   useEffect(() => {
     editingRef.current = editing;
   }, [editing]);
+
+  useEffect(() => {
+    if (editing) {
+      map.dragging.disable();
+    } else {
+      map.dragging.enable();
+    }
+    return () => {
+      map.dragging.enable();
+    };
+  }, [map, editing]);
 
   // Click-vs-dblclick disambiguation: defer adding the point ~220ms so a
   // following dblclick can cancel it. Otherwise every dblclick injects two
@@ -131,6 +162,10 @@ export function ManualDraw({
   const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
     if (editingRef.current) return;
     const { lat, lng } = e.latlng;
+    if (boundaryRef.current) {
+      const ring = boundaryRef.current.coordinates[0] as [number, number][];
+      if (!pointOnOrInsideRing([lng, lat], ring)) return;
+    }
     if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
     clickTimeoutRef.current = setTimeout(() => {
       setPoints((prev) => [...prev, [lng, lat]]);
@@ -253,6 +288,31 @@ export function ManualDraw({
             }}
           />
         ))}
+
+      {editing &&
+        midpointIcon &&
+        points.length >= 2 &&
+        points.map(([lng, lat], i) => {
+          const [nextLng, nextLat] = points[(i + 1) % points.length];
+          const midLat = (lat + nextLat) / 2;
+          const midLng = (lng + nextLng) / 2;
+          return (
+            <Marker
+              key={`mid-${i}`}
+              position={[midLat, midLng]}
+              icon={midpointIcon}
+              eventHandlers={{
+                click: () => {
+                  setPoints((prev) => {
+                    const next = [...prev];
+                    next.splice(i + 1, 0, [midLng, midLat]);
+                    return next;
+                  });
+                },
+              }}
+            />
+          );
+        })}
 
       {!hideControls && (
         <div

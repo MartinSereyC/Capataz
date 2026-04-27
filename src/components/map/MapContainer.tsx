@@ -2,9 +2,16 @@
 
 import dynamic from "next/dynamic";
 import type L from "leaflet";
-import type { Parcel } from "@/types";
+import type { Parcel, GeoJSONPolygon } from "@/types";
 import type { BasemapType } from "@/lib/constants";
 import type { ManualDrawApi } from "./ManualDraw";
+
+export interface MapZone {
+  id: number | string;
+  polygon: GeoJSONPolygon;
+  color?: string;
+  label?: string;
+}
 
 // Dynamically import the Leaflet map to prevent SSR errors.
 // Leaflet requires browser APIs (window, document) that don't exist on the server.
@@ -32,6 +39,14 @@ interface MapContainerProps {
   onManualDrawApi?: (api: ManualDrawApi) => void;
   onPointsChange?: (count: number) => void;
   onEditChange?: (editing: boolean) => void;
+  /** Seed initial vertices for ManualDraw (e.g. re-opening a saved polygon). */
+  initialDrawPoints?: [number, number][];
+  /** Extra polygons to render on the map (e.g. user-drawn zones). */
+  zones?: MapZone[];
+  /** If provided, ManualDraw will reject clicks outside this polygon. */
+  boundary?: import("@/types").GeoJSONPolygon;
+  /** Fires when the user clicks a zone polygon. */
+  onZoneClick?: (id: number | string) => void;
 }
 
 /**
@@ -53,9 +68,13 @@ export function MapContainer({
   onManualDrawApi,
   onPointsChange,
   onEditChange,
+  initialDrawPoints,
+  zones,
+  boundary,
+  onZoneClick,
 }: MapContainerProps) {
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" style={{ zIndex: 0 }}>
       <LeafletMap
         parcel={parcel}
         drawMode={drawMode}
@@ -71,6 +90,10 @@ export function MapContainer({
         onManualDrawApi={onManualDrawApi}
         onPointsChange={onPointsChange}
         onEditChange={onEditChange}
+        initialDrawPoints={initialDrawPoints}
+        zones={zones}
+        boundary={boundary}
+        onZoneClick={onZoneClick}
       />
     </div>
   );

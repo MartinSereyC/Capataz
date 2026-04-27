@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
 
     if (!sentinelRes.ok) {
       const errText = await sentinelRes.text().catch(() => "");
+      console.error(`[satellite-image] Sentinel ${sentinelRes.status}:`, errText);
       return NextResponse.json(
         { error: `Sentinel Hub Process API error: ${sentinelRes.status} ${sentinelRes.statusText}`, detail: errText },
         { status: sentinelRes.status >= 500 ? 502 : sentinelRes.status },

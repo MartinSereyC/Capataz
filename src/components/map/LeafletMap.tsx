@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer as LeafletMapContainer, TileLayer, useMap } from "react-leaflet";
+import { MapContainer as LeafletMapContainer, TileLayer, Polygon, Tooltip, Pane, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { Parcel } from "@/types";
+import type { MapZone } from "./MapContainer";
 import { MAP_DEFAULTS, BASEMAP_TILES, BASEMAP_LABELS_URL } from "@/lib/constants";
 import type { BasemapType } from "@/lib/constants";
 import { ParcelPolygon } from "./ParcelPolygon";
@@ -35,6 +36,14 @@ interface LeafletMapProps {
   onPointsChange?: (count: number) => void;
   /** Fires whenever ManualDraw edit mode toggles. */
   onEditChange?: (editing: boolean) => void;
+  /** Seed initial vertices for ManualDraw. */
+  initialDrawPoints?: [number, number][];
+  /** Extra polygons to render on top of the map. */
+  zones?: MapZone[];
+  /** If provided, ManualDraw will reject clicks outside this polygon. */
+  boundary?: import("@/types").GeoJSONPolygon;
+  /** Fires when the user clicks a zone polygon. */
+  onZoneClick?: (id: number | string) => void;
 }
 
 /**
@@ -88,6 +97,10 @@ export default function LeafletMap({
   onManualDrawApi,
   onPointsChange,
   onEditChange,
+  initialDrawPoints,
+  zones,
+  boundary,
+  onZoneClick,
 }: LeafletMapProps) {
   const controlled = controlledBasemap !== undefined;
   const [internalBasemap, setInternalBasemap] = useState<BasemapType>(
@@ -135,21 +148,42 @@ export default function LeafletMap({
         <BasemapToggle basemap={basemap} onChange={setBasemap} />
       )}
 
+      <Pane name="satelliteImagePane" style={{ zIndex: 250 }} />
+
       {parcel && !drawMode && (
-        <>
-          <SatelliteLayer date={selectedDate} parcel={parcel} availableDates={availableDates} />
-          <ParcelPolygon polygon={parcel.polygon} bbox={parcel.bbox} />
-        </>
+        <SatelliteLayer date={selectedDate} parcel={parcel} availableDates={availableDates} />
       )}
+
+      {parcel && (
+        <ParcelPolygon polygon={parcel.polygon} bbox={parcel.bbox} />
+      )}
+
+      {zones?.map((z) => {
+        const ring = z.polygon.coordinates[0] as [number, number][];
+        const positions = ring.map(([lng, lat]) => [lat, lng] as [number, number]);
+        const color = z.color ?? "#2d6a3e";
+        return (
+          <Polygon
+            key={z.id}
+            positions={positions}
+            pathOptions={{ color: '#ffffff', weight: 3, fillOpacity: 0, opacity: 1 }}
+            eventHandlers={onZoneClick ? { click: () => onZoneClick(z.id) } : undefined}
+          >
+            {z.label && <Tooltip permanent direction="center">{z.label}</Tooltip>}
+          </Polygon>
+        );
+      })}
 
       {drawMode && (
         <ManualDraw
           onConfirm={onManualConfirm}
           onCancel={onManualCancel}
           hideControls={hideInMapControls}
+          initialPoints={initialDrawPoints}
           onApiReady={onManualDrawApi}
           onPointsChange={onPointsChange}
           onEditChange={onEditChange}
+          boundary={boundary}
         />
       )}
 

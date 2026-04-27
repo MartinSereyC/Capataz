@@ -57,7 +57,7 @@ export const es = {
   map: {
     drawInstructions:
       "Haga clic en el mapa para marcar los puntos del perímetro de su terreno. Mínimo 3 puntos.",
-    confirmDraw: "Confirmar perímetro",
+    confirmDraw: "Guardar zona",
     cancelDraw: "Cancelar",
     resetDraw: "Reiniciar dibujo",
     basemapStreet: "Mapa",

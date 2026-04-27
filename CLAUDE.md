@@ -1,5 +1,9 @@
 @AGENTS.md
 
+## REGLA ABSOLUTA: Solo datos reales
+Nunca mostrar valores hardcodeados en la UI como si fueran datos reales.
+Si no hay fuente de datos disponible, el campo no se muestra.
+
 ## Project Summary
 Capataz: Chilean land parcel monitoring via satellite imagery. Upload land deed PDF → extract coordinates → view parcel on map with Sentinel-2 imagery over 6 months. All UI in Spanish.
 
