@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
       input: {
         bounds: {
           bbox: [minLng, minLat, maxLng, maxLat],
+          geometry: polygon,
           properties: { crs: "http://www.opengis.net/def/crs/EPSG/0/4326" },
         },
         data: [{

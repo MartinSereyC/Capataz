@@ -40,7 +40,26 @@ interface ZoneItem {
 const ZONE_COLORS = ['#2d6a3e', '#4a8a52', '#7aaa70', '#aac890'];
 
 export default function ZonasPage() {
-  const [zones, setZones] = useState<ZoneItem[]>([]);
+  const [zones, setZones] = useState<ZoneItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('capataz_zones');
+        return raw ? (JSON.parse(raw) as ZoneItem[]) : [];
+      } catch { return []; }
+    }
+    return [];
+  });
+
+  const [hasExistingZones] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('capataz_zones');
+        return raw ? (JSON.parse(raw) as ZoneItem[]).length > 0 : false;
+      } catch { return false; }
+    }
+    return false;
+  });
+
   const [drawing, setDrawing] = useState(false);
   const [pointCount, setPointCount] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
@@ -50,6 +69,10 @@ export default function ZonasPage() {
   const zoneNameRef = useRef('');
   const [basemap, setBasemap] = useState<BasemapType>('satellite');
   const drawApiRef = useRef<ManualDrawApi | null>(null);
+
+  const [editingZoneId, setEditingZoneId] = useState<number | null>(null);
+  const editingZoneIdRef = useRef<number | null>(null);
+  const [initialDrawPoints, setInitialDrawPoints] = useState<[number, number][] | undefined>(undefined);
 
   const [farmName] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -79,6 +102,27 @@ export default function ZonasPage() {
     setPointCount(0);
     setZoneName('');
     zoneNameRef.current = '';
+    setSelectedCrop(CROPS[0]);
+    selectedCropRef.current = CROPS[0];
+    setEditingZoneId(null);
+    editingZoneIdRef.current = null;
+    setInitialDrawPoints(undefined);
+    setDrawing(true);
+  }
+
+  function startEditingZone(zone: ZoneItem) {
+    setDrawError(null);
+    setPointCount(0);
+    setZoneName(zone.name);
+    zoneNameRef.current = zone.name;
+    setSelectedCrop(zone.crop);
+    selectedCropRef.current = zone.crop;
+    setEditingZoneId(zone.id);
+    editingZoneIdRef.current = zone.id;
+    // Drop the closing duplicate point that GeoJSON adds
+    const ring = zone.polygon.coordinates[0] as [number, number][];
+    const pts = ring.slice(0, ring.length - 1);
+    setInitialDrawPoints(pts);
     setDrawing(true);
   }
 
@@ -89,6 +133,9 @@ export default function ZonasPage() {
     setDrawError(null);
     setZoneName('');
     zoneNameRef.current = '';
+    setEditingZoneId(null);
+    editingZoneIdRef.current = null;
+    setInitialDrawPoints(undefined);
   }
 
   function saveZoneClick() {
@@ -105,7 +152,24 @@ export default function ZonasPage() {
       setDrawError('La zona debe quedar completamente dentro del predio.');
       return;
     }
+
+    const currentEditId = editingZoneIdRef.current;
+
     setZones((prev) => {
+      if (currentEditId !== null) {
+        return prev.map((z) =>
+          z.id === currentEditId
+            ? {
+                ...z,
+                name: zoneNameRef.current.trim() || z.name,
+                crop: selectedCropRef.current,
+                ha: +p.area_hectares.toFixed(1),
+                polygon: p.polygon,
+                bbox: p.bbox,
+              }
+            : z
+        );
+      }
       const nextId = Math.max(0, ...prev.map((z) => z.id)) + 1;
       const name = zoneNameRef.current.trim() || `Cuartel ${nextId}`;
       return [
@@ -120,11 +184,15 @@ export default function ZonasPage() {
         },
       ];
     });
+
     setDrawing(false);
     setPointCount(0);
     setDrawError(null);
     setZoneName('');
     zoneNameRef.current = '';
+    setEditingZoneId(null);
+    editingZoneIdRef.current = null;
+    setInitialDrawPoints(undefined);
   }, [parcel]);
 
   const handleManualCancel = useCallback(() => {
@@ -133,6 +201,9 @@ export default function ZonasPage() {
     setDrawError(null);
     setZoneName('');
     zoneNameRef.current = '';
+    setEditingZoneId(null);
+    editingZoneIdRef.current = null;
+    setInitialDrawPoints(undefined);
   }, []);
 
   function deleteZone(id: number) {
@@ -146,12 +217,16 @@ export default function ZonasPage() {
 
   const totalHa = zones.reduce((s, z) => s + z.ha, 0);
 
-  const mapZones: MapZone[] = zones.map((z, i) => ({
-    id: z.id,
-    polygon: z.polygon,
-    color: ZONE_COLORS[i % ZONE_COLORS.length],
-    label: z.name,
-  }));
+  const mapZones: MapZone[] = zones
+    .filter((z) => z.id !== editingZoneId)
+    .map((z, i) => ({
+      id: z.id,
+      polygon: z.polygon,
+      color: ZONE_COLORS[i % ZONE_COLORS.length],
+      label: z.name,
+    }));
+
+  const backHref = hasExistingZones ? '/dashboard' : '/mapa';
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "'Inter','Helvetica Neue',Arial,sans-serif" }}>
@@ -165,7 +240,7 @@ export default function ZonasPage() {
         {/* Header */}
         <div style={{ padding: '16px 20px 14px', borderBottom: '1px solid var(--c-line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <a href="/mapa" style={{
+            <a href={backHref} style={{
               width: 36, height: 36, borderRadius: 'var(--r-md)',
               background: 'var(--c-bg-muted)', border: '1px solid var(--c-line)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -176,15 +251,23 @@ export default function ZonasPage() {
               </svg>
             </a>
             <div>
-              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--accent)', textTransform: 'uppercase' }}>Paso 2 de 3</p>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)' }}>{farmName}</p>
+              {hasExistingZones ? (
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)' }}>{farmName}</p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--accent)', textTransform: 'uppercase' }}>Paso 2 de 3</p>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)' }}>{farmName}</p>
+                </>
+              )}
             </div>
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.4, marginBottom: 6, color: 'var(--c-text)' }}>
-            Define tus cuarteles
+            {hasExistingZones ? 'Editar cuarteles' : 'Define tus cuarteles'}
           </h2>
           <p style={{ fontSize: 13, color: 'var(--c-text-muted)', lineHeight: 1.5 }}>
-            Dibuja cada cuartel y asígnale el cultivo correspondiente.
+            {hasExistingZones
+              ? 'Renombra, cambia cultivo o edita el contorno de cada cuartel.'
+              : 'Dibuja cada cuartel y asígnale el cultivo correspondiente.'}
           </p>
         </div>
 
@@ -194,9 +277,10 @@ export default function ZonasPage() {
             {zones.map((z, i) => (
               <div key={z.id} style={{
                 background: '#fff', borderRadius: 'var(--r-lg)',
-                border: '1px solid var(--c-line)',
+                border: `1px solid ${z.id === editingZoneId ? 'var(--accent)' : 'var(--c-line)'}`,
                 padding: '12px 14px',
                 display: 'flex', alignItems: 'center', gap: 10,
+                opacity: drawing && z.id !== editingZoneId ? 0.4 : 1,
               }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: 'var(--r-md)',
@@ -210,16 +294,32 @@ export default function ZonasPage() {
                   <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)' }}>{z.name}</p>
                   <p style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>{z.crop} · {z.ha} ha</p>
                 </div>
-                <button
-                  onClick={() => deleteZone(z.id)}
-                  style={{
-                    width: 30, height: 30, borderRadius: 'var(--r-sm)',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--c-text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Icons.trash size={15} />
-                </button>
+                {!drawing && (
+                  <>
+                    <button
+                      onClick={() => startEditingZone(z)}
+                      title="Editar cuartel"
+                      style={{
+                        width: 30, height: 30, borderRadius: 'var(--r-sm)',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--c-text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Icons.pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => deleteZone(z.id)}
+                      title="Eliminar cuartel"
+                      style={{
+                        width: 30, height: 30, borderRadius: 'var(--r-sm)',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--c-text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Icons.trash size={15} />
+                    </button>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -231,7 +331,7 @@ export default function ZonasPage() {
               padding: '14px 16px', background: 'var(--accent-soft)', marginBottom: 8,
             }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-deep)', marginBottom: 10 }}>
-                Dibujando cuartel nuevo…
+                {editingZoneId !== null ? 'Editando cuartel…' : 'Dibujando cuartel nuevo…'}
               </p>
               <div style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-muted)', display: 'block', marginBottom: 6 }}>
@@ -277,7 +377,7 @@ export default function ZonasPage() {
               )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn variant="primary" size="sm" full onClick={saveZoneClick} disabled={pointCount < 3}>
-                  Guardar zona
+                  {editingZoneId !== null ? 'Guardar cambios' : 'Guardar zona'}
                 </Btn>
                 <Btn variant="secondary" size="sm" onClick={cancelDrawing}>
                   Cancelar
@@ -320,7 +420,7 @@ export default function ZonasPage() {
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)' }}>{totalHa.toFixed(1)} ha total</span>
           </div>
           <Btn variant="primary" size="lg" full onClick={handleSaveZones} disabled={zones.length === 0}>
-            Guardar y activar
+            {hasExistingZones ? 'Guardar cambios' : 'Guardar y activar'}
           </Btn>
         </div>
       </div>
@@ -339,6 +439,7 @@ export default function ZonasPage() {
           onBasemapChange={setBasemap}
           hideInMapControls={true}
           boundary={parcel?.polygon ?? undefined}
+          initialDrawPoints={initialDrawPoints}
         />
 
         {/* Drawing toolbar (top right) */}
@@ -400,7 +501,9 @@ export default function ZonasPage() {
             borderRadius: 99, padding: '8px 20px',
             fontSize: 12, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap',
           }}>
-            Haz click en cada esquina del cuartel · doble click para cerrar
+            {editingZoneId !== null
+              ? 'Arrastra los vértices para editar · doble click para confirmar'
+              : 'Haz click en cada esquina del cuartel · doble click para cerrar'}
           </div>
         )}
       </div>
