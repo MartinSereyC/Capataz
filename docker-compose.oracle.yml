@@ -1,0 +1,48 @@
+name: capataz
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    container_name: capataz-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: capataz
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-capataz}
+      POSTGRES_DB: capataz
+    volumes:
+      - capataz-db-data:/var/lib/postgresql/data
+    networks:
+      - proxy-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capataz -d capataz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capataz-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: postgres://capataz:${DB_PASSWORD:-capataz}@db:5432/capataz
+    networks:
+      - proxy-net
+    labels:
+      - "com.example.description=Capataz - Chilean land monitoring"
+
+volumes:
+  capataz-db-data:
+    name: capataz-db-data
+
+networks:
+  proxy-net:
+    external: true
