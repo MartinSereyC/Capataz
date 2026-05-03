@@ -16,6 +16,9 @@ import type { Parcel, GeoJSONPolygon, BboxGeoJSON } from "@/types";
 import type { MapZone } from "@/components/map/MapContainer";
 import { MAP_DEFAULTS } from "@/lib/constants";
 import { toBboxLeaflet } from "@/lib/geo/polygon-builder";
+import { useFusionAnalysis } from "@/hooks/useFusionAnalysis";
+import { textoConfianza, colorConfianza, labelFuente, labelConfianza } from "@/lib/fusion/confidence";
+import { useWeatherForecast } from "@/hooks/useWeatherForecast";
 
 const MapContainer = dynamic(
   () => import("@/components/map/MapContainer").then((m) => m.MapContainer),
@@ -77,6 +80,13 @@ const REC_FOR_STRESS: Record<StressLevel, string> = {
 };
 const PRIORITY_FOR_STRESS: Record<StressLevel, number> = {
   crit: 1, high: 1, warn: 2, mild: 4, ok: 5,
+};
+
+const TIMING_LABEL: Record<string, string> = {
+  'hoy':        'Regar hoy',
+  'mañana':     'Regar mañana',
+  '3-4 días':   'Regar en 3-4 días',
+  'no urgente': 'Sin urgencia de riego',
 };
 
 function decorateZones(saved: SavedZone[]): ZoneRow[] {
@@ -262,7 +272,11 @@ export default function DashboardPage() {
     } catch { return null; }
   });
 
-  const { dates: satDates } = useSatelliteDates(parcel?.bbox ?? null);
+  const { dates: satDates, cloudCoverage } = useSatelliteDates(parcel?.bbox ?? null);
+
+  const parcelCentroidLat = parcel ? (parcel.bbox[1] + parcel.bbox[3]) / 2 : null;
+  const parcelCentroidLng = parcel ? (parcel.bbox[0] + parcel.bbox[2]) / 2 : null;
+  const { forecast: weatherForecast, loading: weatherLoading } = useWeatherForecast(parcelCentroidLat, parcelCentroidLng);
 
   useEffect(() => {
     if (satDates.length > 0) setDayIdx(satDates.length - 1);
@@ -296,6 +310,15 @@ export default function DashboardPage() {
   const totalHa = zones.reduce((s, z) => s + z.ha, 0);
   const urgentCount = displayZones.filter((z) => z.stress === 'crit' || z.stress === 'high').length;
   const activeZoneData = activeZone ? displayZones.find((z) => z.id === activeZone) : null;
+
+  const { result: fusionResult, loading: fusionLoading } = useFusionAnalysis({
+    zoneId: activeZoneData?.id ?? null,
+    polygon: activeZoneData?.polygon ?? null,
+    crop: activeZoneData?.crop ?? null,
+    date: debouncedDate || null,
+    ndmi: activeZoneData ? (zoneStats[activeZoneData.id]?.ndmi ?? null) : null,
+    cloudCoverage: debouncedDate ? (cloudCoverage[debouncedDate] ?? null) : null,
+  });
 
   const mapZones: MapZone[] = displayZones.map((z) => ({
     id: z.id,
@@ -622,6 +645,19 @@ export default function DashboardPage() {
             border: '1px solid var(--c-line)', boxShadow: 'var(--shadow-card)',
             padding: '16px 18px',
           }}>
+            {fusionResult && fusionResult.ultimaImagenDias !== null && fusionResult.ultimaImagenDias > 6 && (
+              <div style={{
+                background: '#fef9c3', border: '1px solid #fde047',
+                borderRadius: 'var(--r-md)', padding: '7px 10px', marginBottom: 10,
+                display: 'flex', gap: 6, alignItems: 'center',
+              }}>
+                <span style={{ fontSize: 11 }}>⚠️</span>
+                <p style={{ fontSize: 11, color: '#713f12', lineHeight: 1.4 }}>
+                  Sin imagen óptica en {fusionResult.ultimaImagenDias} días. Usando radar SAR y clima.
+                </p>
+              </div>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div>
                 <p style={{ fontSize: 11, color: 'var(--c-text-faint)', marginBottom: 2 }}>Cuartel {activeZoneData.id}</p>
@@ -638,10 +674,12 @@ export default function DashboardPage() {
 
             <div style={{ background: 'var(--accent-soft)', borderRadius: 'var(--r-md)', padding: '10px 12px', marginBottom: 12 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-deep)', marginBottom: 3 }}>Recomendación</p>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-deep)' }}>{activeZoneData.rec}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-deep)' }}>
+                {fusionLoading ? '…' : fusionResult ? TIMING_LABEL[fusionResult.timing] : activeZoneData.rec}
+              </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               {(() => {
                 const stat = zoneStats[activeZoneData.id];
                 const fmtIdx = (v: number | null | undefined) =>
@@ -660,6 +698,37 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+
+            {fusionResult && (
+              <div style={{ borderTop: '1px solid var(--c-line)', paddingTop: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-text-faint)' }}>
+                    {labelConfianza(fusionResult.confianza)}
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, borderRadius: 99,
+                    padding: '2px 8px', color: '#fff',
+                    background: colorConfianza(fusionResult.confianza),
+                  }}>
+                    {fusionResult.confianza}
+                  </span>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--c-text-muted)', lineHeight: 1.5, marginBottom: 6 }}>
+                  {textoConfianza(fusionResult.confianza, fusionResult.ultimaImagenDias)}
+                </p>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {fusionResult.fuentes.map((f) => (
+                    <span key={f} style={{
+                      fontSize: 10, padding: '2px 7px', borderRadius: 99,
+                      background: 'var(--c-bg-muted)', border: '1px solid var(--c-line)',
+                      color: 'var(--c-text-muted)', fontWeight: 600,
+                    }}>
+                      {labelFuente(f)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -668,6 +737,58 @@ export default function DashboardPage() {
           background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)',
           borderTop: '1px solid var(--c-line)', padding: '12px 20px 16px',
         }}>
+          {(weatherForecast.length > 0 || weatherLoading) && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                {weatherLoading
+                  ? Array.from({ length: 7 }).map((_, i) => (
+                      <div key={i} style={{
+                        flex: '0 0 auto', width: 52, background: 'var(--c-bg-muted)',
+                        borderRadius: 'var(--r-md)', padding: '6px 0', textAlign: 'center',
+                        opacity: 0.5,
+                      }}>
+                        <div style={{ height: 11, width: 30, background: 'var(--c-line)', borderRadius: 4, margin: '0 auto 4px' }} />
+                        <div style={{ height: 16, width: 20, background: 'var(--c-line)', borderRadius: 4, margin: '0 auto 4px' }} />
+                        <div style={{ height: 10, width: 28, background: 'var(--c-line)', borderRadius: 4, margin: '0 auto' }} />
+                      </div>
+                    ))
+                  : weatherForecast.map((day, i) => {
+                      const [y, m, d] = day.fecha.split('-').map(Number);
+                      const dt = new Date(y, m - 1, d);
+                      const isToday = i === 0;
+                      const dayName = isToday ? 'Hoy' : dt.toLocaleDateString('es-CL', { weekday: 'short' }).replace('.', '');
+                      const rain = day.precipitacionMm;
+                      const icon = rain === 0 ? '☀️' : rain < 2 ? '🌤️' : rain < 8 ? '🌦️' : '🌧️';
+                      return (
+                        <div key={day.fecha} style={{
+                          flex: '0 0 auto', width: 52,
+                          background: isToday ? 'var(--accent-soft)' : 'var(--c-bg-muted)',
+                          border: isToday ? '1px solid var(--accent)' : '1px solid transparent',
+                          borderRadius: 'var(--r-md)', padding: '6px 4px',
+                          textAlign: 'center',
+                        }}>
+                          <p style={{ fontSize: 10, fontWeight: 600, color: isToday ? 'var(--accent-deep)' : 'var(--c-text-faint)', marginBottom: 2, textTransform: 'capitalize' }}>
+                            {dayName}
+                          </p>
+                          <p style={{ fontSize: 16, lineHeight: 1, marginBottom: 3 }}>{icon}</p>
+                          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-text)' }}>
+                            {Math.round(day.tMax)}°
+                          </p>
+                          <p style={{ fontSize: 10, color: 'var(--c-text-faint)' }}>
+                            {Math.round(day.tMin)}°
+                          </p>
+                          {rain > 0 && (
+                            <p style={{ fontSize: 9, color: '#2563eb', marginTop: 2, fontWeight: 600 }}>
+                              {rain.toFixed(0)}mm
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-text-muted)' }}>Línea de tiempo · 3 meses</span>
