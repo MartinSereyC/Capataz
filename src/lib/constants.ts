@@ -75,7 +75,7 @@ export const MAP_DEFAULTS = {
 } as const;
 
 // --- Basemap Tile Layers ---
-export type BasemapType = "street" | "satellite";
+export type BasemapType = "street" | "satellite" | "hybrid";
 
 export const BASEMAP_TILES: Record<
   BasemapType,
@@ -87,6 +87,12 @@ export const BASEMAP_TILES: Record<
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
   satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution:
+      "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
+    maxZoom: 19,
+  },
+  hybrid: {
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution:
       "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",

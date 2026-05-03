@@ -236,6 +236,7 @@ export function SatelliteLayer({ date, parcel, availableDates = [] }: SatelliteL
           <SVGOverlay
             bounds={bounds}
             attributes={{ viewBox: "0 0 1000 1000", preserveAspectRatio: "none" }}
+            pane="satelliteImagePane"
           >
             <defs>
               <clipPath id={cid}>

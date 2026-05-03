@@ -103,3 +103,85 @@ export function buildPolygon(coordinates: [number, number][]): BuiltPolygon {
 
   return { polygon, bboxGeoJSON, area_hectares };
 }
+
+/**
+ * Ray-casting point-in-polygon test on a GeoJSON ring.
+ * `ring` is a list of [lng, lat] pairs (closed or open both work).
+ */
+export function pointInRing(
+  point: [number, number],
+  ring: [number, number][],
+): boolean {
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const intersect =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * True when every vertex of `inner` lies inside `outer`.
+ * Both arguments are GeoJSON polygons (uses the outer ring only).
+ */
+export function polygonInsidePolygon(
+  inner: GeoJSONPolygon,
+  outer: GeoJSONPolygon,
+): boolean {
+  const outerRing = outer.coordinates[0] as [number, number][];
+  const innerRing = inner.coordinates[0] as [number, number][];
+  return innerRing.every((p) => pointInRing(p, outerRing));
+}
+
+/** Minimum distance from a point to a line segment (in degrees). */
+function distanceToSegment(
+  point: [number, number],
+  a: [number, number],
+  b: [number, number],
+): number {
+  const [px, py] = point;
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/**
+ * True when the point is strictly inside the ring OR within `toleranceDeg`
+ * of any edge (~5 m at Chile's latitude with the default 0.00005°).
+ * Use this instead of `pointInRing` when boundary/edge clicks should be allowed.
+ */
+export function pointOnOrInsideRing(
+  point: [number, number],
+  ring: [number, number][],
+  toleranceDeg = 0.00005,
+): boolean {
+  if (pointInRing(point, ring)) return true;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    if (distanceToSegment(point, ring[j], ring[i]) <= toleranceDeg) return true;
+  }
+  return false;
+}
+
+/**
+ * Like `polygonInsidePolygon` but allows vertices that lie exactly on or
+ * very close to the outer boundary. Use this when zones are allowed to share
+ * edges with the farm boundary or with each other.
+ */
+export function polygonOnOrInsidePolygon(
+  inner: GeoJSONPolygon,
+  outer: GeoJSONPolygon,
+): boolean {
+  const outerRing = outer.coordinates[0] as [number, number][];
+  const innerRing = inner.coordinates[0] as [number, number][];
+  return innerRing.every((p) => pointOnOrInsideRing(p, outerRing));
+}

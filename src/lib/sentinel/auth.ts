@@ -57,10 +57,12 @@ export async function getSentinelToken(): Promise<SentinelTokenResponse> {
 
   const data = await res.json() as { access_token: string; expires_in: number };
 
-  // Cache for tokenCacheMs (55 minutes) instead of the full expires_in
+  // Cache for the token's actual TTL minus a 30-second safety buffer,
+  // capped at tokenCacheMs (55 min). Prevents serving expired tokens.
+  const actualMs = (data.expires_in - 30) * 1000;
   tokenCache = {
     token: data.access_token,
-    expiresAt: now + SENTINEL_CONFIG.tokenCacheMs,
+    expiresAt: now + Math.min(SENTINEL_CONFIG.tokenCacheMs, actualMs),
   };
 
   return { token: data.access_token, expires_in: data.expires_in };
