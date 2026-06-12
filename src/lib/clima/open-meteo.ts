@@ -12,6 +12,14 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 const failureCounts = new Map<string, number>();
 
+// Fecha local de Santiago (las series de Open-Meteo vienen en esa zona horaria)
+export function hoyLocalSantiago(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
 export async function obtenerClimaHistoricoYForecast(
   lat: number,
   lon: number,
@@ -35,7 +43,7 @@ export async function obtenerClimaHistoricoYForecast(
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
-    daily: 'temperature_2m_min,temperature_2m_max,precipitation_sum',
+    daily: 'temperature_2m_min,temperature_2m_max,precipitation_sum,et0_fao_evapotranspiration',
     past_days: String(diasHistorico),
     forecast_days: String(diasForecast),
     timezone: 'America/Santiago',
@@ -72,14 +80,18 @@ export async function obtenerClimaHistoricoYForecast(
       temperature_2m_min: number[];
       temperature_2m_max: number[];
       precipitation_sum: number[];
+      et0_fao_evapotranspiration?: (number | null)[];
     };
   };
 
+  const hoy = hoyLocalSantiago();
   const result: ClimaDiario[] = data.daily.time.map((fecha, i) => ({
     fecha,
     tMin: data.daily.temperature_2m_min[i],
     tMax: data.daily.temperature_2m_max[i],
     precipitacionMm: data.daily.precipitation_sum[i] ?? 0,
+    et0Mm: data.daily.et0_fao_evapotranspiration?.[i] ?? null,
+    esPronostico: fecha > hoy,
     origen: 'open_meteo' as const,
     raw: json,
   }));
