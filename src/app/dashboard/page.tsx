@@ -12,13 +12,16 @@ import { Btn } from "@/components/ui/Btn";
 import { StressChip } from "@/components/ui/StressChip";
 import { TimelineSlider } from "@/components/ui/TimelineSlider";
 import type { StressLevel } from "@/components/ui/StressChip";
-import type { Parcel, GeoJSONPolygon, BboxGeoJSON } from "@/types";
+import type { Parcel, SavedZone } from "@/types";
 import type { MapZone } from "@/components/map/MapContainer";
 import { MAP_DEFAULTS } from "@/lib/constants";
 import { toBboxLeaflet } from "@/lib/geo/polygon-builder";
 import { useFusionAnalysis } from "@/hooks/useFusionAnalysis";
 import { textoConfianza, colorConfianza, labelFuente, labelConfianza } from "@/lib/fusion/confidence";
 import { useWeatherForecast } from "@/hooks/useWeatherForecast";
+import { useZoneSync, type ZoneAdvice } from "@/hooks/useZoneSync";
+import { RiegoForm } from "@/components/dashboard/RiegoForm";
+import { es } from "@/lib/i18n/es";
 
 const MapContainer = dynamic(
   () => import("@/components/map/MapContainer").then((m) => m.MapContainer),
@@ -32,18 +35,13 @@ const MapContainer = dynamic(
   }
 );
 
-interface SavedZone {
-  id: number;
-  crop: string;
-  ha: number;
-  polygon: GeoJSONPolygon;
-  bbox: BboxGeoJSON;
-}
-
+// Vista de zona: SavedZone + estado derivado de datos reales (NDVI o advice).
+// stress null = sin dato → presentación neutra (regla: solo datos reales).
 interface ZoneRow extends SavedZone {
-  stress: StressLevel;
-  rec: string;
-  priority: number;
+  stress: StressLevel | null;
+  rec: string | null;
+  priority: number | null;
+  advice: ZoneAdvice | null;
 }
 
 const STRESS_COLORS: Record<StressLevel, string> = {
@@ -70,36 +68,20 @@ const STRESS_BG: Record<StressLevel, string> = {
   ok:   'transparent',
 };
 
-const STRESS_CYCLE: StressLevel[] = ['high', 'crit', 'warn', 'warn', 'mild', 'mild', 'ok', 'ok'];
-const REC_FOR_STRESS: Record<StressLevel, string> = {
-  crit: 'Regar hoy',
-  high: 'Regar hoy',
-  warn: 'Regar mañana',
-  mild: 'Regar en 3 días',
-  ok:   'Sin urgencia',
-};
-const PRIORITY_FOR_STRESS: Record<StressLevel, number> = {
-  crit: 1, high: 1, warn: 2, mild: 4, ok: 5,
-};
-
 const TIMING_LABEL: Record<string, string> = {
-  'hoy':        'Regar hoy',
-  'mañana':     'Regar mañana',
-  '3-4 días':   'Regar en 3-4 días',
-  'no urgente': 'Sin urgencia de riego',
+  'hoy':        es.riego.regarHoy,
+  'mañana':     es.riego.regarManana,
+  '3-4 días':   es.riego.regar34,
+  'no urgente': es.riego.sinUrgencia,
 };
 
-function decorateZones(saved: SavedZone[]): ZoneRow[] {
-  return saved.map((z, i) => {
-    const stress = STRESS_CYCLE[i % STRESS_CYCLE.length];
-    return {
-      ...z,
-      stress,
-      rec: REC_FOR_STRESS[stress],
-      priority: PRIORITY_FOR_STRESS[stress],
-    };
-  });
-}
+const SEMAFORO_STRESS: Record<string, StressLevel> = {
+  rojo: 'crit',
+  amarillo: 'warn',
+  verde: 'ok',
+};
+
+const NEUTRAL_COLOR = '#a8b0a6';
 
 function isoToEs(iso: string | undefined): string {
   if (!iso) return '—';
@@ -282,14 +264,16 @@ export default function DashboardPage() {
     if (satDates.length > 0) setDayIdx(satDates.length - 1);
   }, [satDates.length]);
 
-  const [zones, setZones] = useState<ZoneRow[]>(() => {
+  const [zones, setZones] = useState<SavedZone[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
       const raw = localStorage.getItem('capataz_zones');
-      const parsed = raw ? (JSON.parse(raw) as SavedZone[]) : [];
-      return decorateZones(parsed);
+      return raw ? (JSON.parse(raw) as SavedZone[]) : [];
     } catch { return []; }
   });
+
+  // Sincroniza con la DB, dispara backfill/refresh y trae el advice por zona
+  const { fase: syncFase, advicePorUuid, refrescar: refrescarAdvice } = useZoneSync();
 
   const [debouncedDate, setDebouncedDate] = useState('');
   useEffect(() => {
@@ -300,15 +284,28 @@ export default function DashboardPage() {
 
   const zoneStats = useZoneStats(zones, debouncedDate);
 
-  const displayZones = useMemo(() => zones.map((z) => {
-    const stat = zoneStats[z.id];
-    if (!stat || stat.loading || stat.ndvi === null) return z;
-    const realStress = ndviToStress(stat.ndvi) ?? z.stress;
-    return { ...z, stress: realStress, rec: REC_FOR_STRESS[realStress], priority: PRIORITY_FOR_STRESS[realStress] };
-  }), [zones, zoneStats]);
+  const displayZones: ZoneRow[] = useMemo(() => {
+    const rows = zones.map((z): ZoneRow => {
+      const advice = z.uuid ? (advicePorUuid[z.uuid] ?? null) : null;
+      const stat = zoneStats[z.id];
+      const ndviStress = stat && !stat.loading ? ndviToStress(stat.ndvi) : null;
+      // Advice (balance histórico) manda; NDVI del día como respaldo real
+      const stress = advice ? SEMAFORO_STRESS[advice.rec.semaforo] : ndviStress;
+      return {
+        ...z,
+        stress,
+        rec: advice ? TIMING_LABEL[advice.rec.timing] : null,
+        priority: advice?.prioridad ?? null,
+        advice,
+      };
+    });
+    return rows.sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99) || a.id - b.id);
+  }, [zones, zoneStats, advicePorUuid]);
 
   const totalHa = zones.reduce((s, z) => s + z.ha, 0);
-  const urgentCount = displayZones.filter((z) => z.stress === 'crit' || z.stress === 'high').length;
+  const urgentCount = displayZones.filter((z) =>
+    z.advice ? z.advice.rec.semaforo === 'rojo' : z.stress === 'crit' || z.stress === 'high',
+  ).length;
   const activeZoneData = activeZone ? displayZones.find((z) => z.id === activeZone) : null;
 
   const { result: fusionResult, loading: fusionLoading } = useFusionAnalysis({
@@ -323,7 +320,7 @@ export default function DashboardPage() {
   const mapZones: MapZone[] = displayZones.map((z) => ({
     id: z.id,
     polygon: z.polygon,
-    color: STRESS_COLORS[z.stress],
+    color: z.stress ? STRESS_COLORS[z.stress] : NEUTRAL_COLOR,
     label: `${z.id} · ${z.crop}`,
   }));
 
@@ -338,14 +335,16 @@ export default function DashboardPage() {
   }
 
   function commitEdit(id: number) {
-    setZones((prev) => prev.map((z) => z.id === id ? { ...z, crop: zoneDraft } : z));
+    setZones((prev) => {
+      const next = prev.map((z) => (z.id === id ? { ...z, crop: zoneDraft } : z));
+      try {
+        localStorage.setItem('capataz_zones', JSON.stringify(next));
+      } catch { /* ignore */ }
+      return next;
+    });
     setEditingZone(null);
-    try {
-      const stripped: SavedZone[] = zones.map((z) => z.id === id
-        ? { id: z.id, crop: zoneDraft, ha: z.ha, polygon: z.polygon, bbox: z.bbox }
-        : { id: z.id, crop: z.crop, ha: z.ha, polygon: z.polygon, bbox: z.bbox });
-      localStorage.setItem('capataz_zones', JSON.stringify(stripped));
-    } catch { /* ignore */ }
+    // El cambio de cultivo altera Kc y umbrales: re-sincronizar y recalcular
+    refrescarAdvice();
   }
 
   return (
@@ -524,7 +523,7 @@ export default function DashboardPage() {
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 14px',
                 borderBottom: '1px solid var(--c-line)',
-                background: activeZone === z.id ? 'var(--accent-soft)' : STRESS_BG[z.stress],
+                background: activeZone === z.id ? 'var(--accent-soft)' : (z.stress ? STRESS_BG[z.stress] : 'transparent'),
                 cursor: 'pointer', position: 'relative',
                 transition: 'background 0.1s',
               }}
@@ -532,10 +531,10 @@ export default function DashboardPage() {
                 if (activeZone !== z.id) (e.currentTarget as HTMLDivElement).style.background = 'var(--c-bg-muted)';
               }}
               onMouseLeave={(e) => {
-                if (activeZone !== z.id) (e.currentTarget as HTMLDivElement).style.background = STRESS_BG[z.stress];
+                if (activeZone !== z.id) (e.currentTarget as HTMLDivElement).style.background = z.stress ? STRESS_BG[z.stress] : 'transparent';
               }}
             >
-              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: STRESS_COLORS[z.stress], borderRadius: '0 2px 2px 0' }} />
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: z.stress ? STRESS_COLORS[z.stress] : NEUTRAL_COLOR, borderRadius: '0 2px 2px 0' }} />
 
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-text-faint)', minWidth: 22, textAlign: 'right', paddingLeft: 6 }}>
                 {String(z.id).padStart(2, '0')}
@@ -543,7 +542,19 @@ export default function DashboardPage() {
 
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)', marginBottom: 2 }}>{z.crop}</p>
-                <p style={{ fontSize: 12, color: REC_COLORS[z.stress], fontWeight: 600 }}>{z.rec}</p>
+                {z.rec ? (
+                  <p style={{ fontSize: 12, color: z.stress ? REC_COLORS[z.stress] : 'var(--c-text-muted)', fontWeight: 600 }}>
+                    {z.rec}
+                    {z.advice?.rec.laminaMm != null && (
+                      <span style={{ fontWeight: 500, color: 'var(--c-text-muted)' }}> · {z.advice.rec.laminaMm} mm</span>
+                    )}
+                    {z.advice?.rec.diasHastaEstres != null && z.advice.rec.diasHastaEstres > 0 && (
+                      <span style={{ fontWeight: 500, color: 'var(--c-text-muted)' }}> · estrés en {z.advice.rec.diasHastaEstres}d</span>
+                    )}
+                  </p>
+                ) : (syncFase === 'sincronizando' || syncFase === 'backfill') ? (
+                  <p style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>{es.riego.calculando}</p>
+                ) : null}
               </div>
 
               {editingZone === z.id ? (
@@ -663,20 +674,67 @@ export default function DashboardPage() {
                 <p style={{ fontSize: 11, color: 'var(--c-text-faint)', marginBottom: 2 }}>Cuartel {activeZoneData.id}</p>
                 <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>{activeZoneData.crop}</p>
               </div>
-              <StressChip level={activeZoneData.stress} />
+              {activeZoneData.stress && <StressChip level={activeZoneData.stress} />}
             </div>
 
             <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--c-text-muted)', marginBottom: 12 }}>
               <span>{activeZoneData.ha} ha</span>
-              <span>·</span>
-              <span>Prioridad {activeZoneData.priority}</span>
+              {activeZoneData.priority != null && (
+                <>
+                  <span>·</span>
+                  <span>{es.riego.prioridad} {activeZoneData.priority}</span>
+                </>
+              )}
+              {activeZoneData.advice?.origenMock && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '1px 8px',
+                  background: '#fef3c7', color: '#92400e', alignSelf: 'center',
+                }}>
+                  {es.riego.datosSimulados}
+                </span>
+              )}
             </div>
 
             <div style={{ background: 'var(--accent-soft)', borderRadius: 'var(--r-md)', padding: '10px 12px', marginBottom: 12 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-deep)', marginBottom: 3 }}>Recomendación</p>
               <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-deep)' }}>
-                {fusionLoading ? '…' : fusionResult ? TIMING_LABEL[fusionResult.timing] : activeZoneData.rec}
+                {activeZoneData.rec
+                  ?? (fusionLoading ? '…' : fusionResult ? TIMING_LABEL[fusionResult.timing] : '—')}
               </p>
+              {activeZoneData.advice && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {activeZoneData.advice.rec.laminaMm != null && (
+                    <p style={{ fontSize: 12, color: 'var(--accent-deep)' }}>
+                      {es.riego.laminaSugerida}: <b>{activeZoneData.advice.rec.laminaMm} mm</b>
+                    </p>
+                  )}
+                  {activeZoneData.advice.rec.diasHastaEstres != null && (
+                    <p style={{ fontSize: 12, color: 'var(--accent-deep)' }}>
+                      {es.riego.diasHastaEstres}: <b>{activeZoneData.advice.rec.diasHastaEstres}</b>
+                    </p>
+                  )}
+                  <p style={{ fontSize: 12, color: 'var(--accent-deep)' }}>
+                    {es.riego.deficit}: <b>{activeZoneData.advice.rec.deficitPct.toFixed(0)}%</b>
+                  </p>
+                  {activeZoneData.advice.rec.postergar &&
+                    activeZoneData.advice.rec.lluviaProximaMm != null &&
+                    activeZoneData.advice.rec.lluviaProximaDias != null && (
+                    <p style={{
+                      fontSize: 11, color: '#1d4ed8', background: '#dbeafe',
+                      borderRadius: 'var(--r-sm)', padding: '4px 8px', marginTop: 2,
+                    }}>
+                      {es.riego.postergarLluvia
+                        .replace('{mm}', String(activeZoneData.advice.rec.lluviaProximaMm))
+                        .replace('{dias}', String(activeZoneData.advice.rec.lluviaProximaDias))}
+                    </p>
+                  )}
+                  {activeZoneData.advice.rec.supuestos.includes('sin_registro_riego') && (
+                    <p style={{ fontSize: 10, color: 'var(--c-text-faint)', marginTop: 2 }}>
+                      {es.riego.sinRegistroRiego}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
@@ -699,7 +757,46 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {fusionResult && (
+            {activeZoneData.advice ? (
+              <div style={{ borderTop: '1px solid var(--c-line)', paddingTop: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-text-faint)' }}>
+                    {labelConfianza(activeZoneData.advice.rec.confianza)}
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, borderRadius: 99,
+                    padding: '2px 8px', color: '#fff',
+                    background: colorConfianza(activeZoneData.advice.rec.confianza),
+                  }}>
+                    {activeZoneData.advice.rec.confianza}
+                  </span>
+                </div>
+                {activeZoneData.advice.evaluacion && activeZoneData.advice.evaluacion.maeDeficitPct != null && (
+                  <p style={{ fontSize: 11, color: 'var(--c-text-muted)', lineHeight: 1.5, marginBottom: 6 }}>
+                    {es.riego.validacion
+                      .replace('{n}', String(activeZoneData.advice.evaluacion.nObservaciones))
+                      .replace('{mae}', String(activeZoneData.advice.evaluacion.maeDeficitPct))}
+                  </p>
+                )}
+                <p style={{ fontSize: 10, color: 'var(--c-text-faint)', marginBottom: 6 }}>
+                  {es.riego.balanceAl.replace('{fecha}', isoToEs(activeZoneData.advice.fechaBalance))}
+                </p>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {activeZoneData.advice.fuentes.map((f) => (
+                    <span key={f} style={{
+                      fontSize: 10, padding: '2px 7px', borderRadius: 99,
+                      background: 'var(--c-bg-muted)', border: '1px solid var(--c-line)',
+                      color: 'var(--c-text-muted)', fontWeight: 600,
+                    }}>
+                      {labelFuente(f)}
+                    </span>
+                  ))}
+                </div>
+                {activeZoneData.uuid && (
+                  <RiegoForm zoneUuid={activeZoneData.uuid} onSaved={refrescarAdvice} />
+                )}
+              </div>
+            ) : fusionResult && (
               <div style={{ borderTop: '1px solid var(--c-line)', paddingTop: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-text-faint)' }}>
