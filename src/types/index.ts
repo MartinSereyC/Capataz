@@ -136,3 +136,15 @@ export interface GeocodingResult {
   lng: number;
   boundingbox: [number, number, number, number]; // [south, north, west, east]
 }
+
+/** Zona (cuartel) guardada en localStorage y sincronizada con la DB.
+ *  `uuid` es la identidad estable para el historial; `id` numérico es legado/display. */
+export interface SavedZone {
+  id: number;
+  uuid?: string;
+  name?: string;
+  crop: string;
+  ha: number;
+  polygon: GeoJSONPolygon;
+  bbox: BboxGeoJSON;
+}

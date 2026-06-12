@@ -30,6 +30,7 @@ const CROPS = [
 
 interface ZoneItem {
   id: number;
+  uuid?: string; // identidad estable para el historial en DB
   name: string;
   crop: string;
   ha: number;
@@ -157,18 +158,20 @@ export default function ZonasPage() {
 
     setZones((prev) => {
       if (currentEditId !== null) {
-        return prev.map((z) =>
-          z.id === currentEditId
-            ? {
-                ...z,
-                name: zoneNameRef.current.trim() || z.name,
-                crop: selectedCropRef.current,
-                ha: +p.area_hectares.toFixed(1),
-                polygon: p.polygon,
-                bbox: p.bbox,
-              }
-            : z
-        );
+        return prev.map((z) => {
+          if (z.id !== currentEditId) return z;
+          const geometriaCambio = JSON.stringify(z.polygon) !== JSON.stringify(p.polygon);
+          return {
+            ...z,
+            // Geometría nueva invalida el historial satelital: identidad nueva
+            uuid: geometriaCambio || !z.uuid ? crypto.randomUUID() : z.uuid,
+            name: zoneNameRef.current.trim() || z.name,
+            crop: selectedCropRef.current,
+            ha: +p.area_hectares.toFixed(1),
+            polygon: p.polygon,
+            bbox: p.bbox,
+          };
+        });
       }
       const nextId = Math.max(0, ...prev.map((z) => z.id)) + 1;
       const name = zoneNameRef.current.trim() || `Cuartel ${nextId}`;
@@ -176,6 +179,7 @@ export default function ZonasPage() {
         ...prev,
         {
           id: nextId,
+          uuid: crypto.randomUUID(),
           name,
           crop: selectedCropRef.current,
           ha: +p.area_hectares.toFixed(1),
