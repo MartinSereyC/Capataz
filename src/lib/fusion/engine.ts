@@ -1,33 +1,12 @@
 import type { ClimaDiario } from '../clima/types';
 import type { SueloEstimado } from '../suelo/types';
 import { obtenerFenologia } from '../fenologia/lookup';
-import type { Cultivo } from '../fenologia/types';
 import { calcularEt0Hargreaves } from '../engine/et0';
+import { centroide } from '../geo/centroid';
+import { CROP_SLUG_MAP } from '../balance/cultivos';
+import { ndmiToDeficit, sarVvToDeficit } from '../balance/asimilacion';
+import { deficitToRecomendacion } from '../balance/recomendacion';
 import type { GeoJSONPolygon } from '@/types';
-
-// Maps UI display crop names to fenologia catalog slugs
-const CROP_SLUG_MAP: Record<string, Cultivo> = {
-  'Palta Hass':   'palto_hass',
-  'Uva de mesa':  'uva_mesa',
-  'Uva vinífera': 'uva_vinifera',
-  'Cerezo':       'cerezo',
-  'Nogal':        'nogales',
-  'Kiwi':         'kiwi',
-  'Manzano':      'manzano',
-  'Peral':        'manzano', // fallback to closest equivalent
-  'Arándano':     'arandano',
-  'Duraznero':    'duraznero',
-  'Almendro':     'almendro',
-  'Olivo':        'olivo',
-  'Cítricos':     'citricos',
-};
-
-function centroide(polygon: GeoJSONPolygon): { lat: number; lng: number } {
-  const coords = polygon.coordinates[0];
-  const lat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
-  const lng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
-  return { lat, lng };
-}
 
 function dayOfYear(fecha: string): number {
   const [y, m, d] = fecha.split('-').map(Number);
@@ -66,41 +45,8 @@ function proyectarBalance(
   return deficit;
 }
 
-// Map NDMI value to an estimated current deficit (%)
-function ndmiToDeficit(ndmi: number): number {
-  if (ndmi > 0.3)  return 10;
-  if (ndmi > 0.1)  return 25;
-  if (ndmi > -0.1) return 45;
-  if (ndmi > -0.3) return 65;
-  return 80;
-}
-
-// Map SAR VV backscatter (dB) to estimated deficit (%)
-function sarVvToDeficit(vvDb: number): number {
-  if (vvDb > -10) return 15;
-  if (vvDb > -15) return 40;
-  if (vvDb > -20) return 60;
-  return 80;
-}
-
-// Maps deficit % to semaforo + timing using crop-specific thresholds
-function deficitToRecomendacion(
-  deficitPct: number,
-  umbralRojo: number,
-  umbralAmarillo: number,
-): { semaforo: 'verde' | 'amarillo' | 'rojo'; timing: 'hoy' | 'mañana' | '3-4 días' | 'no urgente' } {
-  if (deficitPct >= umbralRojo) {
-    return { semaforo: 'rojo', timing: 'hoy' };
-  }
-  const midpoint = umbralAmarillo + (umbralRojo - umbralAmarillo) * 0.5;
-  if (deficitPct >= midpoint) {
-    return { semaforo: 'amarillo', timing: 'mañana' };
-  }
-  if (deficitPct >= umbralAmarillo) {
-    return { semaforo: 'amarillo', timing: '3-4 días' };
-  }
-  return { semaforo: 'verde', timing: 'no urgente' };
-}
+// Los mapeos NDMI/SAR→déficit y déficit→semáforo viven en src/lib/balance/
+// (fuente única compartida con el motor de balance histórico).
 
 export interface FusionInput {
   polygon: GeoJSONPolygon;

@@ -26,19 +26,26 @@ Capataz: Chilean land parcel monitoring via satellite imagery. Upload land deed 
 **Upload:** components/upload/UploadZone.tsx, components/upload/ProgressSteps.tsx
 **Hooks:** hooks/useParcelUpload.ts, hooks/useSatelliteDates.ts
 **Context:** context/ParcelContext.tsx
-**Geo Lib:** lib/geo/utm-converter.ts, lib/geo/polygon-builder.ts, lib/geo/validation.ts
+**Geo Lib:** lib/geo/utm-converter.ts, lib/geo/polygon-builder.ts, lib/geo/validation.ts, lib/geo/centroid.ts
 **PDF Lib:** lib/pdf/extract-text.ts, lib/pdf/parse-coordinates.ts
-**Sentinel Lib:** lib/sentinel/auth.ts, lib/sentinel/dates.ts, lib/sentinel/mock.ts, lib/sentinel/process-layer.ts
+**Sentinel Lib:** lib/sentinel/auth.ts, lib/sentinel/dates.ts, lib/sentinel/mock.ts, lib/sentinel/process-layer.ts, lib/sentinel/zone-stats.ts, lib/sentinel/statistical.ts
+**Balance Lib (motor de riego):** lib/balance/{paso,taw,cultivos,asimilacion,recomendacion,backtest,run,backfill,version}.ts
+**DB:** lib/db/client.ts, lib/db/repos/* (zones, weather, satellite, soil, balance, riego, advice, jobs, calibration)
+**Clima Lib:** lib/clima/open-meteo.ts, lib/clima/open-meteo-archive.ts, lib/clima/mock.ts
 **Config:** lib/constants.ts, lib/i18n/es.ts
 **Types:** types/index.ts
+**Riego API:** app/api/zones/sync, app/api/zones/[id]/{backfill,refresh,riegos}, app/api/farms/[id]/advice
 
 ## Architecture Decisions
 - BBox convention: [minLng, minLat, maxLng, maxLat] (GeoJSON standard) everywhere. Leaflet conversion only at component level.
 - Coordinate flow: PDF text → parseCoordinates() → UTM pairs → utmPairsToWGS84() → buildPolygon() → Parcel object
-- Mock mode: MOCK_SENTINEL=true bypasses all Sentinel API calls with synthetic data
+- Mock mode: MOCK_SENTINEL=true bypasses all external API calls (Sentinel, Open-Meteo, SoilGrids) with deterministic synthetic data
 - State: React Context (ParcelContext) — no external state library
 - i18n: Single es.ts file with all Spanish strings
 - Chile-only: Coordinates validated against Chile bounds (lat -56 to -17, lng -76 to -66)
+- Riego model: continuous FAO-56 daily water balance per zone (14-month history in Postgres), anchored by S2 NDMI / S1 VV passes; backtest train −14m..−3m, blind holdout −3m..now → measured confidence. Schema in supabase/migrations/ (Supabase-compatible; runs on local docker compose, port 54322). `npm run db:migrate` applies migrations.
+- Zone identity: client-generated uuid stored in localStorage AND DB; geometry edit ⇒ new uuid (satellite history invalidated)
+- Deficit/semaforo mappings live in lib/balance/ (single source; fusion/engine.ts imports them)
 
 ## Copernicus API Endpoints
 - Token: https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
@@ -53,3 +60,4 @@ Capataz: Chilean land parcel monitoring via satellite imagery. Upload land deed 
 | SENTINEL_HUB_CLIENT_ID | Copernicus OAuth2 client ID |
 | SENTINEL_HUB_CLIENT_SECRET | Copernicus OAuth2 client secret |
 | MOCK_SENTINEL | "true" to bypass real API calls |
+| DATABASE_URL | Postgres (local: postgres://postgres:postgres@localhost:54322/postgres). Sin ella, las rutas de riego devuelven {disponible:false} y la UI oculta el advice |
